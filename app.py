@@ -53,7 +53,7 @@ def check_password():
     if st.session_state.get("password_correct", False):
         return True
 
-    st.text_input("アプリの利用パスワードを入力してください", type="password", on_change=password_entered, key="app_pwd")
+    st.text_input("アプリ利用パスワード", type="password", on_change=password_entered, key="app_pwd")
     if st.session_state.get("password_correct") is False:
         st.error("パスワードが正しくありません")
     return False
@@ -65,23 +65,18 @@ if not check_password():
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# ==========================================
-# データ読み込み関数（キャッシュ15秒）
-# ==========================================
 @st.cache_data(ttl=15)
 def load_data():
-    df = conn.read(worksheet="Data", ttl=15)
+    df = conn.read(worksheet="Data", ttl=0)
     
     if df is None or len(df) == 0:
-        raise ValueError("スプレッドシートからデータが取得できませんでした")
+        raise ValueError("データが取得できませんでした")
         
-    # No列の安全な型変換
     if 'No' in df.columns:
         df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
     else:
         raise ValueError("シートに 'No' 列が存在しません")
 
-    # フラグ・テキスト列の初期化
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
     df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
@@ -102,16 +97,14 @@ def load_data():
     return df
 
 
-# --- 安全な書き込み関数（空データ上書きを物理ガード） ---
 def safe_update_data(new_df):
     if new_df is None or len(new_df) == 0:
-        st.error("データが空のため、書き込みを中止しました。")
+        st.error("データが空のため、書き込み中止")
         return False
     if 'No' not in new_df.columns:
-        st.error("不正なデータ構造のため、書き込みを中止しました。")
+        st.error("不正なデータ構造のため、書き込み中止")
         return False
         
-    # NaNを空文字に変換してシート崩れを防止
     save_df = new_df.copy()
     save_df['Key'] = save_df['Key'].fillna("").astype(str)
     save_df['Value'] = save_df['Value'].fillna("").astype(str)
@@ -121,7 +114,6 @@ def safe_update_data(new_df):
     return True
 
 
-# --- データの読み込みと設定値の抽出 ---
 try:
     df = load_data()
     settings_dict = dict(zip(df['Key'], df['Value']))
@@ -147,29 +139,27 @@ st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
 
-# 設定キーが存在すれば上書き、なければ新しく行を追加する安全な関数
-def upsert_setting(df, key, value):
-    if key in df['Key'].values:
-        df.loc[df['Key'] == key, 'Value'] = str(value)
+def upsert_setting(target_df, key, value):
+    if key in target_df['Key'].values:
+        target_df.loc[target_df['Key'] == key, 'Value'] = str(value)
     else:
-        new_row = {c: "" for c in df.columns}
+        new_row = {c: "" for c in target_df.columns}
         new_row['Key'] = key
         new_row['Value'] = str(value)
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    return df
+        target_df = pd.concat([target_df, pd.DataFrame([new_row])], ignore_index=True)
+    return target_df
 
 if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
     
     st.sidebar.subheader("🏁 ゴールチェック設定")
-    
     if finish_enabled:
-        st.sidebar.success("現在の状態: 🔓 一般開放中")
+        st.sidebar.success("状態: 🔓 一般開放中")
         btn_label = "🔒 ゴールチェックをロックする"
         new_status = False
     else:
-        st.sidebar.warning("現在の状態: 🔒 ロック中")
+        st.sidebar.warning("状態: 🔒 ロック中")
         btn_label = "🔓 ゴールチェックを一般開放する"
         new_status = True
         
@@ -179,12 +169,12 @@ if admin_pass == st.secrets["admin_password"]:
             latest_df = load_data()
             latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
             if safe_update_data(latest_df):
+                load_data.clear()  # ★保存後にキャッシュを消すことで画面が即座に切り替わる
                 st.rerun()
         except Exception as e:
-            st.sidebar.error(f"通信エラー詳細: {e}")
+            st.sidebar.error("通信エラー")
     
     st.sidebar.subheader("⏱️ スタート時刻設定")
-    
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
         try:
             load_data.clear()
@@ -192,14 +182,14 @@ if admin_pass == st.secrets["admin_password"]:
             new_time = datetime.datetime.now(JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
+                load_data.clear()  # ★ここも追加
                 st.rerun()
         except Exception as e:
-            st.sidebar.error(f"通信エラー詳細: {e}")
+            st.sidebar.error("通信エラー")
     
     st.sidebar.markdown("---")
-    st.sidebar.write("または手動で設定：")
     default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
-    manual_time = st.sidebar.time_input("時刻を入力 (時:分:秒)", value=default_time, step=1)
+    manual_time = st.sidebar.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
     
     if st.sidebar.button("手動入力した時刻をセット"):
         try:
@@ -209,19 +199,17 @@ if admin_pass == st.secrets["admin_password"]:
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
+                load_data.clear()  # ★ここも追加
                 st.rerun()
         except Exception as e:
-            st.sidebar.error(f"通信エラー詳細: {e}")
+            st.sidebar.error("通信エラー")
         
     st.sidebar.markdown("---")
-    
     if start_time_val:
-        st.sidebar.info(f"設定済スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
-    else:
-        st.sidebar.warning("スタート時刻：未設定")
+        st.sidebar.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+
 
 # --- メイン画面 ---
-
 tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 # ==========================================
@@ -255,8 +243,6 @@ with tab1:
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
 
-    # 表示件数の記述を削除しました
-    
     for _, row in view_df.iterrows():
         t_no = int(row['No'])
         col1, col2 = st.columns([1, 2.5])
@@ -270,6 +256,7 @@ with tab1:
                         latest_df = load_data()
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
                         if safe_update_data(latest_df):
+                            load_data.clear() # ★保存後キャッシュクリア
                             st.rerun()
                     except Exception:
                         st.error("通信エラー")
@@ -277,7 +264,7 @@ with tab1:
                 col2.button("✅ 済", key=f"start_{t_no}", disabled=True)
                 
         else:
-            if col2.button("未チェック", key=f"start_{t_no}", type="primary"):
+            if col2.button("チェック", key=f"start_{t_no}", type="primary"):
                 try:
                     load_data.clear()
                     latest_df = load_data()
@@ -285,8 +272,10 @@ with tab1:
                     if not match_row.empty and not match_row['Start_Check'].values[0]:
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = True
                         if safe_update_data(latest_df):
+                            load_data.clear() # ★保存後キャッシュクリア
                             st.rerun()
                     else:
+                        load_data.clear()
                         st.rerun()
                 except Exception:
                     st.error("通信エラー")
@@ -328,8 +317,6 @@ with tab2:
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
             
-        # 表示件数の記述を削除しました
-        
         for _, row in view_df2.iterrows():
             t_no = int(row['No'])
             is_dnf = row['DNF']
@@ -353,6 +340,7 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                             if safe_update_data(latest_df):
+                                load_data.clear() # ★保存後キャッシュクリア
                                 st.rerun()
                         except Exception:
                             st.error("通信エラー")
@@ -370,6 +358,7 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                             if safe_update_data(latest_df):
+                                load_data.clear() # ★保存後キャッシュクリア
                                 st.rerun()
                         except Exception:
                             st.error("通信エラー")
@@ -401,8 +390,10 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
                             if safe_update_data(latest_df):
+                                load_data.clear() # ★保存後キャッシュクリア
                                 st.rerun()
                         else:
+                            load_data.clear()
                             st.rerun()
                     except Exception:
                         st.error("通信エラー")
@@ -418,8 +409,10 @@ with tab2:
                                 latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
                                 latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                                 if safe_update_data(latest_df):
+                                    load_data.clear() # ★保存後キャッシュクリア
                                     st.rerun()
                             else:
+                                load_data.clear()
                                 st.rerun()
                         except Exception:
                             st.error("通信エラー")
