@@ -20,7 +20,7 @@ st.markdown("""
     
     /* ボタン内部の文字サイズを強制的に大きくする */
     div.stButton > button p {
-        font-size: 24px !important; /* ←ここで文字サイズを指定（24pxなど） */
+        font-size: 24px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
     }
@@ -285,34 +285,44 @@ with tab1:
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
-            st.caption("【スタート前_チェック済・棄権一覧】")
-        for _, row in done_df.iterrows():
-            t_no = int(row['No'])
-            no_str = f"{t_no:03d}"
-            is_start = row['Start_Check']
-            is_dns = row['DNS']
+        st.caption("【スタート前_チェック済・棄権一覧】")
+        
+        # ▼ここから変更：済・棄権のリストを横3列に並べる
+        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
+        grid_cols = 3
+        for i in range(0, len(done_df), grid_cols):
+            cols = st.columns(grid_cols)
+            batch = done_df.iloc[i:i+grid_cols]
+            for idx, (_, row) in enumerate(batch.iterrows()):
+                t_no = int(row['No'])
+                no_str = f"{t_no:03d}"
+                is_start = row['Start_Check']
+                is_dns = row['DNS']
 
-            if is_dns:
-                if is_admin:
-                    if st.button(f"↩️ {no_str}:棄権取消す", key=f"dns_cancel_{t_no}", type="secondary"):
-                        try:
-                            update_dns_cells(t_no, False)
-                            st.session_state.local_updates[f"dns_{t_no}"] = False
-                            st.session_state.local_updates[f"start_{t_no}"] = False
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-                else:
-                    st.button(f"{no_str}:DNS(棄権)", key=f"dns_done_{t_no}", disabled=True)
-            elif is_start:
-                if is_admin:
-                    if st.button(f"❌ {no_str}:スタートチェック取消す", key=f"start_cancel_{t_no}", type="secondary"):
-                        try:
-                            update_start_cell(t_no, False)
-                            st.session_state.local_updates[f"start_{t_no}"] = False
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-                else:
-                    st.button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True)
+                if is_dns:
+                    if is_admin:
+                        # 長いとレイアウトが崩れるため「取消」と短くしています
+                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                            try:
+                                update_dns_cells(t_no, False)
+                                st.session_state.local_updates[f"dns_{t_no}"] = False
+                                st.session_state.local_updates[f"start_{t_no}"] = False
+                                st.rerun()
+                            except Exception as e: st.error(f"エラー: {e}")
+                    else:
+                        cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True)
+                elif is_start:
+                    if is_admin:
+                        # 長いとレイアウトが崩れるため「取消」と短くしています
+                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary"):
+                            try:
+                                update_start_cell(t_no, False)
+                                st.session_state.local_updates[f"start_{t_no}"] = False
+                                st.rerun()
+                            except Exception as e: st.error(f"エラー: {e}")
+                    else:
+                        cols[idx].button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- タブ2：ゴールチェック ---
@@ -350,10 +360,11 @@ with tab2:
         started_df = df_finish_view[df_finish_view['Start_Check'] & (~df_finish_view['DNS'])]
         filter_finish = st.radio("状態フィルター(ゴール)", ["すべて", "未ゴール", "ゴール済 (DNF含)"], horizontal=True, label_visibility="collapsed", key="f_finish")
         
+        # ▼ここから変更：DNFが確実にゴール済に含まれるように修正
         if filter_finish == "未ゴール":
-            view_df2 = started_df[~started_df['Finish_Check']]
+            view_df2 = started_df[(~started_df['Finish_Check']) & (~started_df['DNF'])]
         elif filter_finish == "ゴール済 (DNF含)":
-            view_df2 = started_df[started_df['Finish_Check']]
+            view_df2 = started_df[started_df['Finish_Check'] | started_df['DNF']]
         else:
             view_df2 = started_df
             
@@ -367,7 +378,7 @@ with tab2:
 
         view_df2 = view_df2.sort_values(by="No")
 
-        unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
+        unfinish_df = view_df2[(~view_df2['Finish_Check']) & (~view_df2['DNF'])].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
             st.markdown('<div class="grid-box">', unsafe_allow_html=True)
@@ -413,6 +424,7 @@ with tab2:
                             net_jp = f"{h}時間{m}分{s}秒" if h > 0 else f"{m}分{s}秒"
                     except Exception:
                         pass
+                
                 # 改行（<br>）を入れ、2行が右揃えになるように div タグで囲む
                 time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
                 
