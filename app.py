@@ -9,77 +9,84 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（スマホでの縦落ちを強制解除・横スクロール化） ---
+# --- UI最適化CSS（画面外はみ出し防止・完全レスポンシブ） ---
 st.markdown("""
 <style>
-/* 1. タブ上部の空白を極限まで詰める */
+/* 1. タブ上部の空白を極限まで詰める & 横揺れ防止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+    padding-left: 0.3rem !important;
+    padding-right: 0.3rem !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
 }
 header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* 2. Streamlit標準のカラム自動折り返し（縦並び化）をスマホでも強制解除 */
+/* 2. リスト行の横並び（画面幅100%内に均等収容） */
 div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
-    flex-wrap: nowrap !important;
     align-items: center !important;
-    gap: 4px !important;
+    gap: 3px !important;
     margin-bottom: 3px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
 }
 div[data-testid="column"] {
     min-width: 0 !important;
-    flex: 1 1 0% !important;
     margin-bottom: 0px !important;
 }
 
-/* 3. 番号帯フィルター専用の横スクロールラッパー */
-.range-scroll-box div[data-testid="stHorizontalBlock"] {
-    overflow-x: auto !important;
-    white-space: nowrap !important;
-    padding-bottom: 6px !important;
-    -webkit-overflow-scrolling: touch;
-}
-.range-scroll-box div[data-testid="column"] {
-    flex: 0 0 58px !important; /* ボタンの幅を固定して横スクロールさせる */
-    min-width: 58px !important;
-}
-
-/* 4. ボタンのコンパクト化と2行表示対応 */
+/* 3. ボタンのコンパクト化（文字がはみ出さないサイズ） */
 div[data-testid="column"] button {
     padding: 2px 2px !important;
-    font-size: 0.72rem !important;
-    line-height: 1.15 !important;
+    font-size: 0.70rem !important;
+    line-height: 1.1 !important;
     width: 100% !important;
-    min-height: 38px !important;
-    height: 38px !important;
+    min-height: 36px !important;
+    height: 36px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     white-space: normal !important;
     text-align: center !important;
+    box-sizing: border-box !important;
 }
 
-/* 5. ゴールタイム表示枠の高さをボタン（38px）に完全に一致させる */
+/* 4. 番号帯フィルター専用の横スクロール */
+.range-scroll-box {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 6px !important;
+}
+.range-scroll-box div[data-testid="stHorizontalBlock"] {
+    width: max-content !important; /* 横に並べてスクロール可能にする */
+    gap: 4px !important;
+}
+.range-scroll-box div[data-testid="column"] {
+    flex: 0 0 54px !important;
+    width: 54px !important;
+}
+
+/* 5. タイム表示枠（ボタンの高さ36pxに統一・収容） */
 .time-badge {
     background-color: #d1e7dd;
     color: #0f5132;
     border: 1px solid #badbcc;
     border-radius: 4px;
-    height: 38px !important;
-    min-height: 38px !important;
+    height: 36px !important;
+    min-height: 36px !important;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 0.65rem;
-    line-height: 1.15;
+    font-size: 0.62rem;
+    line-height: 1.1;
     text-align: center;
     width: 100%;
     padding: 0 1px;
@@ -89,12 +96,12 @@ div[data-testid="column"] button {
     color: #842029;
     border: 1px solid #f5c2c7;
     border-radius: 4px;
-    height: 38px !important;
-    min-height: 38px !important;
+    height: 36px !important;
+    min-height: 36px !important;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: bold;
     width: 100%;
 }
