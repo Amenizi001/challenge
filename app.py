@@ -25,7 +25,7 @@ header[data-testid="stHeader"] {
 }
 div[data-testid="column"] button {
     padding: 4px 2px !important;
-    font-size: 1.1rem !important;
+    font-size: 2.0rem !important;
     font-weight: bold !important;
     line-height: 1.2 !important;
     width: 100% !important;
@@ -200,9 +200,10 @@ if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデ
 # ==========================================
 # 管理者認証（状態管理）
 # ==========================================
-is_admin = False
-if st.session_state.get("admin_pwd_input") == st.secrets["admin_password"]:
-    is_admin = True
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
+is_admin = st.session_state.is_admin
 
 # ==========================================
 # メイン画面（3タブ構成に変更）
@@ -488,12 +489,19 @@ with tab2:
 # --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
 with tab3:
     st.markdown("<h4 style='margin:0; padding:2px 0;'>⚙️ 管理者メニュー</h4>", unsafe_allow_html=True)
-    st.text_input("管理者パスワードを入力", type="password", key="admin_pwd_input")
     
-    if is_admin:
+    if not st.session_state.is_admin:
+        admin_input = st.text_input("管理者パスワードを入力", type="password")
+        if st.button("ログイン"):
+            if admin_input == st.secrets["admin_password"]:
+                st.session_state.is_admin = True
+                st.rerun()
+            else:
+                st.error("パスワードが正しくありません")
+    else:
         st.success("管理者認証成功")
         if st.button("🚪 管理者メニューから抜ける"):
-            st.session_state.admin_pwd_input = ""
+            st.session_state.is_admin = False
             st.rerun()
         
         st.markdown("#### 🏁 ゴールチェック設定")
