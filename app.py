@@ -162,11 +162,28 @@ if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
     
-    st.sidebar.subheader("🏁 ゴールチェック設定")
-    new_finish_enabled = st.sidebar.checkbox(
-        "ゴールチェック機能を一般開放する", 
-        value=finish_enabled
-    )
+st.sidebar.subheader("🏁 ゴールチェック設定")
+    
+    # 現在の状態を表示
+    if finish_enabled:
+        st.sidebar.success("現在の状態: 🔓 一般開放中")
+        btn_label = "🔒 ゴールチェックをロックする"
+        new_status = False  # ボタンを押したらFalse(ロック)にする
+    else:
+        st.sidebar.warning("現在の状態: 🔒 ロック中")
+        btn_label = "🔓 ゴールチェックを一般開放する"
+        new_status = True   # ボタンを押したらTrue(開放)にする
+        
+    # 危険なチェックボックスをやめ、安全な「1回押しボタン」に変更
+    if st.sidebar.button(btn_label):
+        try:
+            load_data.clear()
+            latest_df = load_data()
+            latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
+            if safe_update_data(latest_df):
+                st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"通信エラー詳細: {e}")
     
     if new_finish_enabled != finish_enabled:
         try:
@@ -240,6 +257,18 @@ with tab1:
     else:
         view_df = df
         
+    if not df.empty:
+        max_no = int(df['No'].max())
+        range_options = ["すべて"]
+        for i in range(1, max_no + 1, 10):
+            range_options.append(f"{i}～{i+9}")
+            
+        selected_range_start = st.selectbox("🔍 チーム番号帯で表示", range_options, key="range_start")
+        
+        if selected_range_start != "すべて":
+            s_num, e_num = map(int, selected_range_start.split("～"))
+            view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
+        
     st.caption(f"表示件数: {len(view_df)} 件")
     
     for _, row in view_df.iterrows():
@@ -298,7 +327,19 @@ with tab2:
             view_df2 = started_df[started_df['Finish_Check']]
         else:
             view_df2 = started_df
+
+        if not df.empty:
+            max_no2 = int(df['No'].max())
+            range_options2 = ["すべて"]
+            for i in range(1, max_no2 + 1, 10):
+                range_options2.append(f"{i}～{i+9}")
+                
+            selected_range_finish = st.selectbox("🔍 チーム番号帯で表示", range_options2, key="range_finish")
             
+            if selected_range_finish != "すべて":
+                s_num, e_num = map(int, selected_range_finish.split("～"))
+                view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
+                
         st.caption(f"表示件数: {len(view_df2)} 件")
         
         for _, row in view_df2.iterrows():
