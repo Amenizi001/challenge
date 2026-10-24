@@ -40,7 +40,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 @st.cache_data(ttl=15)
 def load_data():
     """参加者データと設定値(F列/G列)を同時に読み込む"""
-    df = conn.read(worksheet="Data", ttl=0)
+    df = conn.read(worksheet="Data", ttl=15)
     
     # 参加者データ側の型整形
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
