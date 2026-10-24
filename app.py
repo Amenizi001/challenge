@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import time  # ★追加：タイムラグを調整するための機能
 from zoneinfo import ZoneInfo
 from streamlit_gsheets import GSheetsConnection
 
@@ -111,6 +112,7 @@ def safe_update_data(new_df):
     save_df['Finish_Check_Time'] = save_df['Finish_Check_Time'].fillna("").astype(str)
     
     conn.update(worksheet="Data", data=save_df)
+    time.sleep(2.0)  # ★超重要：Google側が最新状態に更新されるのを確実に2秒待つ
     return True
 
 
@@ -139,9 +141,11 @@ st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
 
+# 確実な書き換え処理に変更
 def upsert_setting(target_df, key, value):
-    if key in target_df['Key'].values:
-        target_df.loc[target_df['Key'] == key, 'Value'] = str(value)
+    mask = target_df['Key'] == key
+    if mask.any():
+        target_df.loc[mask, 'Value'] = str(value)
     else:
         new_row = {c: "" for c in target_df.columns}
         new_row['Key'] = key
@@ -169,7 +173,7 @@ if admin_pass == st.secrets["admin_password"]:
             latest_df = load_data()
             latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
             if safe_update_data(latest_df):
-                load_data.clear()  # ★保存後にキャッシュを消すことで画面が即座に切り替わる
+                load_data.clear()
                 st.rerun()
         except Exception as e:
             st.sidebar.error("通信エラー")
@@ -182,7 +186,7 @@ if admin_pass == st.secrets["admin_password"]:
             new_time = datetime.datetime.now(JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
-                load_data.clear()  # ★ここも追加
+                load_data.clear()
                 st.rerun()
         except Exception as e:
             st.sidebar.error("通信エラー")
@@ -199,7 +203,7 @@ if admin_pass == st.secrets["admin_password"]:
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
-                load_data.clear()  # ★ここも追加
+                load_data.clear()
                 st.rerun()
         except Exception as e:
             st.sidebar.error("通信エラー")
@@ -256,7 +260,7 @@ with tab1:
                         latest_df = load_data()
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
                         if safe_update_data(latest_df):
-                            load_data.clear() # ★保存後キャッシュクリア
+                            load_data.clear()
                             st.rerun()
                     except Exception:
                         st.error("通信エラー")
@@ -272,7 +276,7 @@ with tab1:
                     if not match_row.empty and not match_row['Start_Check'].values[0]:
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = True
                         if safe_update_data(latest_df):
-                            load_data.clear() # ★保存後キャッシュクリア
+                            load_data.clear()
                             st.rerun()
                     else:
                         load_data.clear()
@@ -340,7 +344,7 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                             if safe_update_data(latest_df):
-                                load_data.clear() # ★保存後キャッシュクリア
+                                load_data.clear()
                                 st.rerun()
                         except Exception:
                             st.error("通信エラー")
@@ -358,7 +362,7 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                             if safe_update_data(latest_df):
-                                load_data.clear() # ★保存後キャッシュクリア
+                                load_data.clear()
                                 st.rerun()
                         except Exception:
                             st.error("通信エラー")
@@ -390,7 +394,7 @@ with tab2:
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
                             latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
                             if safe_update_data(latest_df):
-                                load_data.clear() # ★保存後キャッシュクリア
+                                load_data.clear()
                                 st.rerun()
                         else:
                             load_data.clear()
@@ -409,7 +413,7 @@ with tab2:
                                 latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
                                 latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
                                 if safe_update_data(latest_df):
-                                    load_data.clear() # ★保存後キャッシュクリア
+                                    load_data.clear()
                                     st.rerun()
                             else:
                                 load_data.clear()
