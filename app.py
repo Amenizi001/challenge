@@ -147,7 +147,7 @@ st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
 
-# 【追加】設定キーが存在すれば上書き、なければ新しく行を追加する安全な関数
+# 設定キーが存在すれば上書き、なければ新しく行を追加する安全な関数
 def upsert_setting(df, key, value):
     if key in df['Key'].values:
         df.loc[df['Key'] == key, 'Value'] = str(value)
@@ -162,19 +162,17 @@ if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
     
-st.sidebar.subheader("🏁 ゴールチェック設定")
+    st.sidebar.subheader("🏁 ゴールチェック設定")
     
-    # 現在の状態を表示
     if finish_enabled:
         st.sidebar.success("現在の状態: 🔓 一般開放中")
         btn_label = "🔒 ゴールチェックをロックする"
-        new_status = False  # ボタンを押したらFalse(ロック)にする
+        new_status = False
     else:
         st.sidebar.warning("現在の状態: 🔒 ロック中")
         btn_label = "🔓 ゴールチェックを一般開放する"
-        new_status = True   # ボタンを押したらTrue(開放)にする
+        new_status = True
         
-    # 危険なチェックボックスをやめ、安全な「1回押しボタン」に変更
     if st.sidebar.button(btn_label):
         try:
             load_data.clear()
@@ -185,24 +183,13 @@ st.sidebar.subheader("🏁 ゴールチェック設定")
         except Exception as e:
             st.sidebar.error(f"通信エラー詳細: {e}")
     
-    if new_finish_enabled != finish_enabled:
-        try:
-            load_data.clear()
-            latest_df = load_data()
-            # 修正：安全な設定更新関数を使用する
-            latest_df = upsert_setting(latest_df, 'finish_enabled', new_finish_enabled)
-            if safe_update_data(latest_df):
-                st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"通信エラー詳細: {e}")
-    
     st.sidebar.subheader("⏱️ スタート時刻設定")
+    
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
         try:
             load_data.clear()
             latest_df = load_data()
             new_time = datetime.datetime.now(JST)
-            # 修正：安全な設定更新関数を使用する
             latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
                 st.rerun()
@@ -220,7 +207,6 @@ st.sidebar.subheader("🏁 ゴールチェック設定")
             latest_df = load_data()
             today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-            # 修正：安全な設定更新関数を使用する
             latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
                 st.rerun()
@@ -228,11 +214,11 @@ st.sidebar.subheader("🏁 ゴールチェック設定")
             st.sidebar.error(f"通信エラー詳細: {e}")
         
     st.sidebar.markdown("---")
+    
     if start_time_val:
         st.sidebar.info(f"設定済スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
     else:
         st.sidebar.warning("スタート時刻：未設定")
-
 
 # --- メイン画面 ---
 st.title("マラソン大会 チェックシステム")
