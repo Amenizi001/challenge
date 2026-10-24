@@ -14,7 +14,7 @@ st.markdown("""
 <style>
     /* ボタンの文字を大きくする設定 */
     div.stButton > button {
-        font-size: 20px !important; 
+        font-size: 35px !important; 
         font-weight: bold !important; 
         padding: 15px 20px !important; 
         height: auto !important; 
