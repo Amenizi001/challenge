@@ -44,6 +44,7 @@ try:
     
     # 2. 設定データの読み込み
     settings_df = conn.read(worksheet="Settings", ttl=0)
+    settings_df['Value'] = settings_df['Value'].fillna("").astype(str)
     settings_dict = dict(zip(settings_df['Key'], settings_df['Value']))
     
     # 設定値のパース（変換）
