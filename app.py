@@ -41,6 +41,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl=0) 
 df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
 df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
+df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
 
 
 # --- サイドバー：管理者設定 ---
