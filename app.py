@@ -213,7 +213,7 @@ is_admin = st.session_state.is_admin
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🚩 スタート", "🏁 ゴール", "⚙️ 管理者"])
 
-# --- タブ1：スタートチェック ---
+# --- タブ1：スタートチェック済チェック ---
 with tab1:
     st.markdown('<div class="title-box">', unsafe_allow_html=True)
     t_col1, t_col2 = st.columns([3, 1])
@@ -259,7 +259,7 @@ with tab1:
 
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
-        st.caption("【未チェック】タップしてスタート完了")
+        st.caption("【未チェック】タップしてスタートチェック完了")
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(uncheck_df), grid_cols):
@@ -299,7 +299,7 @@ with tab1:
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
-            st.caption("【スタート済・棄権一覧】")
+            st.caption("【スタートチェック済・棄権一覧】")
         for _, row in done_df.iterrows():
             t_no = int(row['No'])
             no_str = f"{t_no:03d}"
