@@ -9,46 +9,30 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（スマホでの縦落ち強制防止 ＆ 番号順表示） ---
+# --- UI最適化CSS（横スクロール完全防止・縦スクロールのみに最適化） ---
 st.markdown("""
 <style>
+/* 画面の余白を詰め、横スクロールを完全に禁止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.3rem !important;
-    padding-right: 0.3rem !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
     max-width: 100% !important;
+    overflow-x: hidden !important;
 }
 header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* スマホ表示でもカラムを絶対に縦落ちさせず横3等分に維持する */
-div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    gap: 4px !important;
-    margin-bottom: 4px !important;
-    width: 100% !important;
-}
-
-div[data-testid="column"] {
-    min-width: 0 !important;
-    flex: 1 1 0% !important;
-    width: 100% !important;
-    margin-bottom: 0px !important;
-}
-
-/* ボタンサイズと自動改行対応 */
+/* ボタンの高さと文字サイズの統一（画面幅にフィット） */
 div[data-testid="column"] button {
-    padding: 3px 2px !important;
-    font-size: 0.72rem !important;
+    padding: 4px 1px !important;
+    font-size: 0.75rem !important;
     line-height: 1.15 !important;
     width: 100% !important;
-    min-height: 38px !important;
-    height: 38px !important;
+    min-height: 40px !important;
+    height: 40px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -57,12 +41,12 @@ div[data-testid="column"] button {
     box-sizing: border-box !important;
 }
 
-/* ゴール済カード（1段1チーム用） */
+/* ゴール済・DNFカード（1段1チーム用） */
 .finish-card {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 6px 8px;
     margin-bottom: 4px;
     display: flex;
     justify-content: space-between;
@@ -88,7 +72,7 @@ div[data-testid="column"] button {
     background-color: #fff3cd;
     border: 1px solid #ffe69c;
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 6px 8px;
     margin-bottom: 4px;
     display: flex;
     justify-content: space-between;
@@ -307,7 +291,7 @@ tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 # --- タブ1：スタートチェック ---
 with tab1:
-    t_col1, t_col2 = st.columns([2.5, 1.0])
+    t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     if t_col2.button("🔄 更新", key="upd_start"):
         st.session_state.local_updates.clear()
@@ -346,10 +330,9 @@ with tab1:
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
 
-    # ★ チーム番号順に確実にソート
     view_df = view_df.sort_values(by="No")
 
-    # 1. 未チェックのチーム（上段にグリッド表示）
+    # 1. 未チェック（上段に3列グリッド表示）
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【未チェック】タップしてスタート完了")
@@ -367,7 +350,7 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 管理者の場合：未チェックチームの「棄権(DNS)登録ボタン」
+    # 管理者用：未チェックチームの棄権(DNS)登録
     if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【管理者用：出走前棄権(DNS)登録】")
         grid_cols = 3
@@ -422,7 +405,7 @@ with tab1:
 
 # --- タブ2：ゴールチェック ---
 with tab2:
-    t_col3, t_col4 = st.columns([2.5, 1.0])
+    t_col3, t_col4 = st.columns([3, 1])
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     if t_col4.button("🔄 更新", key="upd_finish"):
         st.session_state.local_updates.clear()
@@ -469,10 +452,9 @@ with tab2:
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
 
-        # ★ チーム番号順に確実にソート
         view_df2 = view_df2.sort_values(by="No")
 
-        # --- ① 最上段：未ゴールチームの「001:ゴール」ボタン群（グリッド表示） ---
+        # --- ① 最上段：未ゴールチームの「001:ゴール」ボタン群（3列グリッド） ---
         unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
@@ -526,7 +508,7 @@ with tab2:
                 card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
 
                 if is_admin:
-                    col_card, col_btn = st.columns([2.5, 1.2])
+                    col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
                     if col_btn.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
@@ -538,7 +520,7 @@ with tab2:
                 else:
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群 ---
+        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群（3列グリッド） ---
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
@@ -558,7 +540,7 @@ with tab2:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
 
-        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧（番号昇順） ---
+        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧 ---
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
@@ -567,7 +549,7 @@ with tab2:
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 if is_admin:
-                    col_card, col_btn = st.columns([2.5, 1.2])
+                    col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
                     if col_btn.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
