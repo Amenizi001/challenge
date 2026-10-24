@@ -23,9 +23,9 @@ st.markdown("""
 header[data-testid="stHeader"] {
     display: none !important;
 }
+/* ボタン本体の余白・高さ */
 div[data-testid="column"] button {
     padding: 4px 2px !important;
-    font-size: 2.0rem !important;
     font-weight: bold !important;
     line-height: 1.2 !important;
     width: 100% !important;
@@ -36,6 +36,14 @@ div[data-testid="column"] button {
     justify-content: center !important;
     white-space: normal !important;
     text-align: center !important;
+}
+
+/* ★ ボタン内の文字サイズを強制指定（ここを追加） */
+div[data-testid="column"] button p {
+    font-size: 2.0rem !important; /* ★ここで確実に大きさが変わります */
+    font-weight: bold !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
 }
 .title-box div[data-testid="stHorizontalBlock"] {
     display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
