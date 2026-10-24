@@ -9,82 +9,10 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS ---
-st.markdown("""
-<style>
-.block-container {
-    padding-top: 0.5rem !important;
-    padding-bottom: 2rem !important;
-    padding-left: 0.2rem !important;
-    padding-right: 0.2rem !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-}
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-/* ボタン本体の余白・高さ */
-div[data-testid="column"] button,
-div[data-testid="column"] button*{
-    font-size: 1.4rem !important;
-    padding: 4px 2px !important;
-    font-weight: bold !important;
-    line-height: 1.2 !important;
-    width: 100% !important;
-    min-height: 48px !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    white-space: normal !important;
-    text-align: center !important;
-}
-
-.title-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
-}
-.title-box div[data-testid="column"]:nth-child(1) {
-    width: 70% !important; flex: 1 1 70% !important; min-width: 70% !important;
-}
-.title-box div[data-testid="column"]:nth-child(2) {
-    width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
-}
-.grid-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important;
-}
-.grid-box div[data-testid="column"] {
-    width: calc(33.333% - 4px) !important; flex: 1 1 calc(33.333% - 4px) !important;
-    min-width: calc(33.333% - 4px) !important; max-width: calc(33.333% - 4px) !important;
-}
-.admin-card-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important;
-}
-.admin-card-box div[data-testid="column"]:nth-child(1) {
-    width: 75% !important; flex: 1 1 75% !important; min-width: 75% !important;
-}
-.admin-card-box div[data-testid="column"]:nth-child(2) {
-    width: 25% !important; flex: 1 1 25% !important; min-width: 25% !important;
-}
-.finish-card {
-    background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
-    padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
-    align-items: center; width: 100%; box-sizing: border-box;
-}
-.finish-no { font-weight: bold; color: #212529; font-size: 1.15rem; }
-.finish-time { color: #0f5132; font-weight: bold; font-size: 1.05rem; }
-.finish-clock { color: #6c757d; font-size: 0.95rem; }
-.dnf-card {
-    background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
-    padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
-    align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
-    width: 100%; box-sizing: border-box;
-}
-</style>
-""", unsafe_allow_html=True)
-
 def check_password():
     query_auth = st.query_params.get("auth")
     if query_auth == st.secrets["app_password"]: return True
+    
     def password_entered():
         if st.session_state["app_pwd"] == st.secrets["app_password"]:
             st.session_state["password_correct"] = True
@@ -92,6 +20,7 @@ def check_password():
             del st.session_state["app_pwd"]
         else:
             st.session_state["password_correct"] = False
+            
     if st.session_state.get("password_correct", False): return True
     st.text_input("アプリ利用パスワード", type="password", on_change=password_entered, key="app_pwd")
     if st.session_state.get("password_correct") is False: st.error("パスワードが正しくありません")
@@ -165,8 +94,10 @@ def load_data():
     df = pd.DataFrame(data[1:], columns=headers)
     if 'No' in df.columns: 
         df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
+        
     def str_to_bool(val):
         return str(val).strip().upper() == 'TRUE'
+        
     df['Start_Check'] = df['Start_Check'].apply(str_to_bool)
     df['Finish_Check'] = df['Finish_Check'].apply(str_to_bool)
     df['DNF'] = df['DNF'].apply(str_to_bool)
