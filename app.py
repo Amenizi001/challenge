@@ -9,10 +9,9 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（スマホでの縦落ち完全ブロック＆文字サイズ拡大） ---
+# --- UI最適化CSS ---
 st.markdown("""
 <style>
-/* 画面の余白を詰め、横揺れを防止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
@@ -24,11 +23,9 @@ st.markdown("""
 header[data-testid="stHeader"] {
     display: none !important;
 }
-
-/* 全体のボタンベーススタイル（文字サイズ大幅拡大） */
 div[data-testid="column"] button {
     padding: 4px 2px !important;
-    font-size: 1.1rem !important; /* ★文字サイズ拡大 */
+    font-size: 1.1rem !important;
     font-weight: bold !important;
     line-height: 1.2 !important;
     width: 100% !important;
@@ -40,12 +37,8 @@ div[data-testid="column"] button {
     white-space: normal !important;
     text-align: center !important;
 }
-
-/* ★ 1. タイトル＆更新ボタン行の横並び強制（70%:30%） */
 .title-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
+    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
 }
 .title-box div[data-testid="column"]:nth-child(1) {
     width: 70% !important; flex: 1 1 70% !important; min-width: 70% !important;
@@ -53,27 +46,15 @@ div[data-testid="column"] button {
 .title-box div[data-testid="column"]:nth-child(2) {
     width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
 }
-
-/* ★ 2. ボタンの3列グリッド（スマホでも絶対に縦に崩さず3列を維持） */
 .grid-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 6px !important;
+    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important;
 }
 .grid-box div[data-testid="column"] {
-    width: calc(33.333% - 4px) !important;
-    flex: 1 1 calc(33.333% - 4px) !important;
-    min-width: calc(33.333% - 4px) !important;
-    max-width: calc(33.333% - 4px) !important;
+    width: calc(33.333% - 4px) !important; flex: 1 1 calc(33.333% - 4px) !important;
+    min-width: calc(33.333% - 4px) !important; max-width: calc(33.333% - 4px) !important;
 }
-
-/* ★ 3. 管理者の取消ボタン付きカード行（75%:25%） */
 .admin-card-box div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
+    display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important;
 }
 .admin-card-box div[data-testid="column"]:nth-child(1) {
     width: 75% !important; flex: 1 1 75% !important; min-width: 75% !important;
@@ -81,8 +62,6 @@ div[data-testid="column"] button {
 .admin-card-box div[data-testid="column"]:nth-child(2) {
     width: 25% !important; flex: 1 1 25% !important; min-width: 25% !important;
 }
-
-/* ★ ゴール済・DNFカード（文字サイズ2段階拡大） */
 .finish-card {
     background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
     padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
@@ -91,7 +70,6 @@ div[data-testid="column"] button {
 .finish-no { font-weight: bold; color: #212529; font-size: 1.15rem; }
 .finish-time { color: #0f5132; font-weight: bold; font-size: 1.05rem; }
 .finish-clock { color: #6c757d; font-size: 0.95rem; }
-
 .dnf-card {
     background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
     padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
@@ -164,7 +142,6 @@ def update_setting_cell(key: str, value: str):
     headers = ws.row_values(1)
     key_col_idx = headers.index('Key') + 1 if 'Key' in headers else 7
     val_col_idx = key_col_idx + 1
-
     keys = ws.col_values(key_col_idx)
     if key in keys:
         row_idx = keys.index(key) + 1
@@ -181,31 +158,19 @@ def load_data():
     data = ws.get_all_values() 
     if not data or len(data) < 2:
         raise ValueError("データが取得できませんでした")
-        
     headers = data[0]
     df = pd.DataFrame(data[1:], columns=headers)
-        
-    expected_cols = ['No', 'Start_Check', 'Finish_Check', 'Finish_Check_Time', 'DNF', 'DNS', 'Key', 'Value']
-    current_cols = list(df.columns)
-    if current_cols[:8] != expected_cols:
-        st.error("⚠️ スプレッドシートの列構成が正しくありません。")
-        st.stop()
-        
     if 'No' in df.columns: 
         df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
-        
     def str_to_bool(val):
         return str(val).strip().upper() == 'TRUE'
-        
     df['Start_Check'] = df['Start_Check'].apply(str_to_bool)
     df['Finish_Check'] = df['Finish_Check'].apply(str_to_bool)
     df['DNF'] = df['DNF'].apply(str_to_bool)
     df['DNS'] = df['DNS'].apply(str_to_bool)
-    
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
     df['Key'] = df['Key'].fillna("").astype(str).str.strip()
     df['Value'] = df['Value'].fillna("").astype(str).str.strip()
-    
     global_sync["last_read_time"] = time.time()
     return df
 
@@ -233,75 +198,16 @@ else:
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
 # ==========================================
-# サイドバー：管理者メニュー
+# 管理者認証（状態管理）
 # ==========================================
-st.sidebar.header("管理者メニュー")
-admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password", key="admin_pwd_input")
 is_admin = False
-
-if admin_pass == st.secrets["admin_password"]:
-    st.sidebar.success("管理者認証成功")
+if st.session_state.get("admin_pwd_input") == st.secrets["admin_password"]:
     is_admin = True
-    if st.sidebar.button("🚪 管理者メニューから抜ける"):
-        st.session_state.admin_pwd_input = ""
-        st.rerun()
-    
-    st.sidebar.subheader("🏁 ゴールチェック設定")
-    if finish_enabled:
-        st.sidebar.success("状態: 🔓 一般開放中")
-        btn_label = "🔒 ゴールチェックをロックする"
-        new_status = False
-    else:
-        st.sidebar.warning("状態: 🔒 ロック中")
-        btn_label = "🔓 ゴールチェックを一般開放する"
-        new_status = True
-        
-    if st.sidebar.button(btn_label):
-        try:
-            update_setting_cell('finish_enabled', new_status)
-            time.sleep(2.0)
-            load_data.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"更新エラーが発生しました: {e}")
-    
-    st.sidebar.subheader("⏱️ スタート時刻設定")
-    if st.sidebar.button("現在時刻(JST)をスタートに設定"):
-        try:
-            new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-            update_setting_cell('start_time', new_time)
-            time.sleep(2.0)
-            load_data.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"更新エラーが発生しました: {e}")
-            
-    st.sidebar.markdown("---")
-    default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
-    manual_time = st.sidebar.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
-    
-    if st.sidebar.button("手動入力した時刻をセット"):
-        try:
-            today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
-            new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-            update_setting_cell('start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
-            time.sleep(2.0)
-            load_data.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"更新エラーが発生しました: {e}")
-
-    st.sidebar.markdown("---")
-    if start_time_val:
-        st.sidebar.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
-    else:
-        st.sidebar.info("設定済:\n未設定")
-
 
 # ==========================================
-# メイン画面（タブ）
+# メイン画面（3タブ構成に変更）
 # ==========================================
-tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
+tab1, tab2, tab3 = st.tabs(["🚩 スタート", "🏁 ゴール", "⚙️ 管理者"])
 
 # --- タブ1：スタートチェック ---
 with tab1:
@@ -347,7 +253,6 @@ with tab1:
 
     view_df = view_df.sort_values(by="No")
 
-    # 1. 未チェック（グリッド表示）
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【未チェック】タップしてスタート完了")
@@ -367,7 +272,6 @@ with tab1:
                     except Exception as e: st.error(f"エラー: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 管理者用：未チェックチームの棄権(DNS)登録
     if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【管理者用：出走前棄権(DNS)登録】")
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
@@ -387,7 +291,6 @@ with tab1:
                     except Exception as e: st.error(f"エラー: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. チェック済み・DNSのチーム
     done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
@@ -474,7 +377,6 @@ with tab2:
 
         view_df2 = view_df2.sort_values(by="No")
 
-        # --- ① 未ゴール（3列グリッド） ---
         unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
@@ -496,7 +398,6 @@ with tab2:
                         except Exception as e: st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- ② ゴール済み（1行1チーム） ---
         finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             if filter_finish == "すべて":
@@ -506,26 +407,22 @@ with tab2:
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 f_time_str = str(row['Finish_Check_Time'])
-
                 net_jp = ""
                 time_jp = ""
                 if f_time_str and f_time_str != "nan":
                     try:
                         f_parts = [int(p) for p in f_time_str.split(':')]
                         time_jp = f"{f_parts[0]}時{f_parts[1]}分{f_parts[2]}秒"
-
                         if start_time_val:
                             f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
                             f_datetime = datetime.datetime.combine(start_time_val.date(), f_time_obj, tzinfo=JST)
                             net_seconds = int((f_datetime - start_time_val).total_seconds())
-
                             h = net_seconds // 3600
                             m = (net_seconds % 3600) // 60
                             s = net_seconds % 60
                             net_jp = f"{h}時間{m}分{s}秒" if h > 0 else f"{m}分{s}秒"
                     except Exception:
                         pass
-
                 time_info = f"<span class='finish-time'>タイム: {net_jp}</span> <span class='finish-clock'>(着 {time_jp})</span>" if net_jp else f"<span class='finish-clock'>着 {time_jp}</span>"
                 card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
 
@@ -544,7 +441,6 @@ with tab2:
                 else:
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- ③ 管理者用：未ゴールチームの棄権(DNF)登録（3列グリッド） ---
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
@@ -566,7 +462,6 @@ with tab2:
                         except Exception as e: st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # --- ④ すでにDNF（途中棄権）済みのチーム一覧 ---
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
@@ -589,3 +484,65 @@ with tab2:
                     st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+
+# --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
+with tab3:
+    st.markdown("<h4 style='margin:0; padding:2px 0;'>⚙️ 管理者メニュー</h4>", unsafe_allow_html=True)
+    st.text_input("管理者パスワードを入力", type="password", key="admin_pwd_input")
+    
+    if is_admin:
+        st.success("管理者認証成功")
+        if st.button("🚪 管理者メニューから抜ける"):
+            st.session_state.admin_pwd_input = ""
+            st.rerun()
+        
+        st.markdown("#### 🏁 ゴールチェック設定")
+        if finish_enabled:
+            st.success("状態: 🔓 一般開放中")
+            btn_label = "🔒 ゴールチェックをロックする"
+            new_status = False
+        else:
+            st.warning("状態: 🔒 ロック中")
+            btn_label = "🔓 ゴールチェックを一般開放する"
+            new_status = True
+            
+        if st.button(btn_label):
+            try:
+                update_setting_cell('finish_enabled', new_status)
+                time.sleep(2.0)
+                load_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+        
+        st.markdown("#### ⏱️ スタート時刻設定")
+        if st.button("現在時刻(JST)をスタートに設定"):
+            try:
+                new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+                update_setting_cell('start_time', new_time)
+                time.sleep(2.0)
+                load_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+                
+        st.markdown("---")
+        default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
+        manual_time = st.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
+        
+        if st.button("手動入力した時刻をセット"):
+            try:
+                today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
+                new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
+                update_setting_cell('start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
+                time.sleep(2.0)
+                load_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+
+        st.markdown("---")
+        if start_time_val:
+            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+        else:
+            st.info("設定済:\n未設定")
