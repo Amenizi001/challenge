@@ -13,17 +13,28 @@ JST = ZoneInfo("Asia/Tokyo")
 st.markdown("""
 <style>
     /* ---------------------------------------------------
-       ★ メインの操作ボタン（未・済・取消など）のみ大きくする
-       （use_container_width=True が設定されたボタンを狙い撃ち）
+       1. 基本設定：すべてのボタンを「特大サイズ（35px）」にする
     ---------------------------------------------------- */
-    div.stButton[style*="width"] > button {
+    div.stButton > button {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    div.stButton[style*="width"] > button p {
-        font-size: 35px !important; 
+    div.stButton > button p {
+        font-size: 35px !important; /* ← ご希望の35px */
         font-weight: bold !important; 
         margin: 0 !important;
+    }
+    
+    /* ---------------------------------------------------
+       2. 例外設定：マーカー（.small-marker）の直下にあるボタンだけ
+          標準サイズ（16px）に縮小する
+    ---------------------------------------------------- */
+    div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button {
+        padding: 4px 10px !important; 
+    }
+    div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button p {
+        font-size: 16px !important; 
+        font-weight: normal !important;
     }
     
     /* ---------------------------------------------------
@@ -209,15 +220,17 @@ with tab1:
     t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
-    # 💡更新ボタンは通常サイズ（use_container_width=True をつけない）
-    if t_col2.button("🔄 更新", key="upd_start"):
-        st.session_state.local_updates.clear()
-        if time.time() - global_sync["last_read_time"] >= 5.0:
-            load_data.clear()
-            st.rerun()
-        else:
-            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-            st.rerun()
+    with t_col2:
+        # ★ マーカーを置いて更新ボタンを小さくする
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        if st.button("🔄 更新", key="upd_start"):
+            st.session_state.local_updates.clear()
+            if time.time() - global_sync["last_read_time"] >= 5.0:
+                load_data.clear()
+                st.rerun()
+            else:
+                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
@@ -260,7 +273,6 @@ with tab1:
             for idx, (_, row) in enumerate(batch.iterrows()):
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                # 💡一覧のボタンには use_container_width=True をつける（CSSで大きくなる）
                 if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
                     try:
                         update_start_cell(t_no, True)
@@ -335,14 +347,17 @@ with tab2:
     t_col3, t_col4 = st.columns([3, 1])
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     
-    if t_col4.button("🔄 更新", key="upd_finish"):
-        st.session_state.local_updates.clear()
-        if time.time() - global_sync["last_read_time"] >= 5.0:
-            load_data.clear()
-            st.rerun()
-        else:
-            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-            st.rerun()
+    with t_col4:
+        # ★ マーカーを置いて更新ボタンを小さくする
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        if st.button("🔄 更新", key="upd_finish"):
+            st.session_state.local_updates.clear()
+            if time.time() - global_sync["last_read_time"] >= 5.0:
+                load_data.clear()
+                st.rerun()
+            else:
+                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     
     if not finish_enabled:
@@ -437,7 +452,9 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
-                    if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary", use_container_width=True):
+                    # ★ マーカーを置いて取消ボタンを小さくする
+                    st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+                    if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
                             update_finish_cells(t_no, False, "")
                             st.session_state.local_updates[f"finish_{t_no}"] = False
@@ -480,7 +497,9 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
-                    if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary", use_container_width=True):
+                    # ★ マーカーを置いて取消ボタンを小さくする
+                    st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+                    if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
                             st.session_state.local_updates[f"dnf_{t_no}"] = False
@@ -498,6 +517,8 @@ with tab3:
     
     if not st.session_state.is_admin:
         admin_input = st.text_input("管理者パスワードを入力", type="password")
+        # ★ マーカー
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("ログイン"):
             if admin_input == st.secrets["admin_password"]:
                 st.session_state.is_admin = True
@@ -506,6 +527,8 @@ with tab3:
                 st.error("パスワードが正しくありません")
     else:
         st.success("管理者認証成功")
+        # ★ マーカー
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🚪 管理者メニューから抜ける"):
             st.session_state.is_admin = False
             st.rerun()
@@ -520,6 +543,8 @@ with tab3:
             btn_label = "🔓 ゴールチェックを一般開放する"
             new_status = True
             
+        # ★ マーカー
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button(btn_label):
             try:
                 update_setting_cell('finish_enabled', new_status)
@@ -530,6 +555,8 @@ with tab3:
                 st.error(f"更新エラーが発生しました: {e}")
         
         st.markdown("#### ⏱️ スタート時刻設定")
+        # ★ マーカー
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("現在時刻(JST)をスタートに設定"):
             try:
                 new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
@@ -544,6 +571,8 @@ with tab3:
         default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
         manual_time = st.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
         
+        # ★ マーカー
+        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("手動入力した時刻をセット"):
             try:
                 today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
@@ -557,6 +586,6 @@ with tab3:
 
         st.markdown("---")
         if start_time_val:
-            st.info(f"スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
         else:
-            st.info("スタート時刻:\n未設定")
+            st.info("設定済:\n未設定")
