@@ -34,20 +34,22 @@ if not check_password():
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- データの読み込み (DataシートとSettingsシート) ---
+# --- データの読み込み (API制限対策のため10秒キャッシュ) ---
 try:
     # 1. 参加者データの読み込み
-    df = conn.read(worksheet="Data", ttl=0) 
+    df = conn.read(worksheet="Data", ttl=10) 
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
     df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
     
     # 2. 設定データの読み込み
-    settings_df = conn.read(worksheet="Settings", ttl=0)
+    settings_df = conn.read(worksheet="Settings", ttl=10)
+    # Value列を必ず文字列(str)に固定（型エラー防止）
     settings_df['Value'] = settings_df['Value'].fillna("").astype(str)
+    
     settings_dict = dict(zip(settings_df['Key'], settings_df['Value']))
     
-    # 設定値のパース（変換）
+    # 設定値の変換
     finish_enabled = str(settings_dict.get('finish_enabled', 'False')).lower() == 'true'
     
     start_time_str = str(settings_dict.get('start_time', ''))
@@ -80,17 +82,23 @@ if admin_pass == st.secrets["admin_password"]:
     
     # フラグが変更されたらSettingsシートを更新
     if new_finish_enabled != finish_enabled:
-        settings_df.loc[settings_df['Key'] == 'finish_enabled', 'Value'] = str(new_finish_enabled)
-        conn.update(worksheet="Settings", data=settings_df)
+        st.cache_data.clear() # キャッシュをクリア
+        latest_settings = conn.read(worksheet="Settings", ttl=0)
+        latest_settings['Value'] = latest_settings['Value'].fillna("").astype(str)
+        latest_settings.loc[latest_settings['Key'] == 'finish_enabled', 'Value'] = str(new_finish_enabled)
+        conn.update(worksheet="Settings", data=latest_settings)
         st.rerun()
     
     st.sidebar.subheader("⏱️ スタート時刻設定")
     
     # 現在時刻で設定するボタン
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
+        st.cache_data.clear()
+        latest_settings = conn.read(worksheet="Settings", ttl=0)
+        latest_settings['Value'] = latest_settings['Value'].fillna("").astype(str)
         new_time = datetime.datetime.now(JST)
-        settings_df.loc[settings_df['Key'] == 'start_time', 'Value'] = new_time.strftime('%Y-%m-%d %H:%M:%S')
-        conn.update(worksheet="Settings", data=settings_df)
+        latest_settings.loc[latest_settings['Key'] == 'start_time', 'Value'] = new_time.strftime('%Y-%m-%d %H:%M:%S')
+        conn.update(worksheet="Settings", data=latest_settings)
         st.rerun()
     
     st.sidebar.markdown("---")
@@ -101,15 +109,17 @@ if admin_pass == st.secrets["admin_password"]:
     manual_time = st.sidebar.time_input("時刻を入力 (時:分:秒)", value=default_time, step=1)
     
     if st.sidebar.button("手動入力した時刻をセット"):
+        st.cache_data.clear()
+        latest_settings = conn.read(worksheet="Settings", ttl=0)
+        latest_settings['Value'] = latest_settings['Value'].fillna("").astype(str)
         today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
         new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-        settings_df.loc[settings_df['Key'] == 'start_time', 'Value'] = new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        conn.update(worksheet="Settings", data=settings_df)
+        latest_settings.loc[latest_settings['Key'] == 'start_time', 'Value'] = new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        conn.update(worksheet="Settings", data=latest_settings)
         st.rerun()
         
     st.sidebar.markdown("---")
     
-    # 設定されているスタート時刻の表示
     if start_time_val:
         st.sidebar.info(f"設定済スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
     else:
@@ -143,20 +153,26 @@ with tab1:
         # チェック済みの場合
         if row['Start_Check']:
             if is_admin:
-                # 管理者は「取消」ボタンを押せる
+                # 管理者のみ「取消」可能
                 if col2.button("❌ 取消", key=f"start_{row['No']}", type="secondary"):
-                    df.at[index, 'Start_Check'] = False
-                    conn.update(worksheet="Data", data=df)
+                    st.cache_data.clear()
+                    latest_df = conn.read(worksheet="Data", ttl=0)
+                    latest_df.at[index, 'Start_Check'] = False
+                    conn.update(worksheet="Data", data=latest_df)
                     st.rerun()
             else:
-                # 一般ユーザーには無効化された「チェック済」ボタンを表示
                 col2.button("✅ チェック済", key=f"start_{row['No']}", disabled=True)
+                
         # 未チェックの場合
         else:
             if col2.button("✅ チェック", key=f"start_{row['No']}", type="primary"):
-                df.at[index, 'Start_Check'] = True
-                conn.update(worksheet="Data", data=df)
+                # 他の人の上書きを防ぐため、最新データを取得して更新
+                st.cache_data.clear()
+                latest_df = conn.read(worksheet="Data", ttl=0)
+                latest_df.at[index, 'Start_Check'] = True
+                conn.update(worksheet="Data", data=latest_df)
                 st.rerun()
+
 
 # ==========================================
 # タブ2：ゴールチェック
@@ -164,7 +180,6 @@ with tab1:
 with tab2:
     st.header("ゴール チェック")
     
-    # スプレッドシートから読み込んだフラグを確認
     if not finish_enabled:
         st.warning("現在、ゴールチェック機能はロックされています。（管理者が開放するまでお待ちください）")
     else:
@@ -187,23 +202,25 @@ with tab2:
             # ゴール済みの場合
             if row['Finish_Check']:
                 if is_admin:
-                    # 管理者は「取消」ボタンを押せる
                     if col2.button("❌ 取消", key=f"finish_{row['No']}", type="secondary"):
-                        df.at[index, 'Finish_Check'] = False
-                        df.at[index, 'Finish_Check_Time'] = ""
-                        conn.update(worksheet="Data", data=df)
+                        st.cache_data.clear()
+                        latest_df = conn.read(worksheet="Data", ttl=0)
+                        latest_df.at[index, 'Finish_Check'] = False
+                        latest_df.at[index, 'Finish_Check_Time'] = ""
+                        conn.update(worksheet="Data", data=latest_df)
                         st.rerun()
                 else:
-                    # 一般ユーザーには無効化されたボタンを表示
                     col2.button("🏁 ゴール済", key=f"finish_{row['No']}", disabled=True)
                     
             # 未ゴールの場合
             else:
                 if col2.button("🏁 ゴール！", key=f"finish_{row['No']}", type="primary"):
-                    df.at[index, 'Finish_Check'] = True
+                    st.cache_data.clear()
+                    latest_df = conn.read(worksheet="Data", ttl=0)
+                    latest_df.at[index, 'Finish_Check'] = True
                     now_jst = datetime.datetime.now(JST)
-                    df.at[index, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
-                    conn.update(worksheet="Data", data=df)
+                    latest_df.at[index, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
+                    conn.update(worksheet="Data", data=latest_df)
                     st.rerun()
                 
             # ゴール時間とタイムの表示処理
@@ -214,7 +231,6 @@ with tab2:
                     try:
                         f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
                         f_datetime = datetime.datetime.combine(datetime.date.today(), f_time_obj, tzinfo=JST)
-                        
                         net_time = f_datetime - start_time_val
                         time_display = f"ゴール: {f_time_str} (タイム: {str(net_time).split('.')[0]})"
                     except Exception:
