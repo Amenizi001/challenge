@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import time  # ★追加：タイムラグを調整するための機能
+import time
 from zoneinfo import ZoneInfo
 from streamlit_gsheets import GSheetsConnection
 
@@ -112,7 +112,7 @@ def safe_update_data(new_df):
     save_df['Finish_Check_Time'] = save_df['Finish_Check_Time'].fillna("").astype(str)
     
     conn.update(worksheet="Data", data=save_df)
-    time.sleep(2.0)  # ★超重要：Google側が最新状態に更新されるのを確実に2秒待つ
+    # ここにあった一律の待機時間を削除し、ボタン側へ移動しました
     return True
 
 
@@ -141,7 +141,6 @@ st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
 
-# 確実な書き換え処理に変更
 def upsert_setting(target_df, key, value):
     mask = target_df['Key'] == key
     if mask.any():
@@ -173,6 +172,7 @@ if admin_pass == st.secrets["admin_password"]:
             latest_df = load_data()
             latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
             if safe_update_data(latest_df):
+                time.sleep(2.0)  # 管理者設定は確実に2秒待機
                 load_data.clear()
                 st.rerun()
         except Exception as e:
@@ -186,6 +186,7 @@ if admin_pass == st.secrets["admin_password"]:
             new_time = datetime.datetime.now(JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
+                time.sleep(2.0)  # 管理者設定は確実に2秒待機
                 load_data.clear()
                 st.rerun()
         except Exception as e:
@@ -203,6 +204,7 @@ if admin_pass == st.secrets["admin_password"]:
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
+                time.sleep(2.0)  # 管理者設定は確実に2秒待機
                 load_data.clear()
                 st.rerun()
         except Exception as e:
@@ -260,6 +262,7 @@ with tab1:
                         latest_df = load_data()
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
                         if safe_update_data(latest_df):
+                            time.sleep(0.3)  # ★ 通常操作はサクサク進む0.3秒
                             load_data.clear()
                             st.rerun()
                     except Exception:
@@ -276,6 +279,7 @@ with tab1:
                     if not match_row.empty and not match_row['Start_Check'].values[0]:
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = True
                         if safe_update_data(latest_df):
+                            time.sleep(0.3)  # ★ 通常操作はサクサク進む0.3秒
                             load_data.clear()
                             st.rerun()
                     else:
@@ -324,99 +328,4 @@ with tab2:
         for _, row in view_df2.iterrows():
             t_no = int(row['No'])
             is_dnf = row['DNF']
-            is_finished = row['Finish_Check']
-            
-            if is_admin and (not is_finished):
-                col1, col2, col3, col4 = st.columns([1, 1.8, 1.8, 2.8])
-            else:
-                col1, col2, col4 = st.columns([1, 2.2, 3.2])
-                col3 = None
-            
-            col1.markdown(f"**No.{t_no:03d}**")
-            
-            if is_dnf:
-                if is_admin:
-                    if col2.button("↩️ 取消", key=f"undnf_{t_no}", type="secondary"):
-                        try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            latest_df.loc[latest_df['No'] == t_no, 'DNF'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                            if safe_update_data(latest_df):
-                                load_data.clear()
-                                st.rerun()
-                        except Exception:
-                            st.error("通信エラー")
-                else:
-                    col2.button("棄権済", key=f"dnf_dis_{t_no}", disabled=True)
-                
-                col4.error("DNF")
-                
-            elif is_finished:
-                if is_admin:
-                    if col2.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
-                        try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                            if safe_update_data(latest_df):
-                                load_data.clear()
-                                st.rerun()
-                        except Exception:
-                            st.error("通信エラー")
-                else:
-                    col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
-                
-                f_time_str = str(row['Finish_Check_Time'])
-                if start_time_val and f_time_str and f_time_str != "nan":
-                    try:
-                        f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
-                        f_datetime = datetime.datetime.combine(datetime.date.today(), f_time_obj, tzinfo=JST)
-                        net_time = f_datetime - start_time_val
-                        time_display = f"{f_time_str} ({str(net_time).split('.')[0]})"
-                    except Exception:
-                        time_display = f"{f_time_str}"
-                else:
-                    time_display = f"{f_time_str}"
-                    
-                col4.success(time_display)
-
-            else:
-                if col2.button("🏁 ゴール", key=f"finish_btn_{t_no}", type="primary"):
-                    try:
-                        load_data.clear()
-                        latest_df = load_data()
-                        match_row = latest_df[latest_df['No'] == t_no]
-                        if not match_row.empty and not match_row['Finish_Check'].values[0]:
-                            now_jst = datetime.datetime.now(JST)
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
-                            if safe_update_data(latest_df):
-                                load_data.clear()
-                                st.rerun()
-                        else:
-                            load_data.clear()
-                            st.rerun()
-                    except Exception:
-                        st.error("通信エラー")
-                
-                if is_admin and col3 is not None:
-                    if col3.button("⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
-                        try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            match_row = latest_df[latest_df['No'] == t_no]
-                            if not match_row.empty and not match_row['DNF'].values[0]:
-                                latest_df.loc[latest_df['No'] == t_no, 'DNF'] = True
-                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
-                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                                if safe_update_data(latest_df):
-                                    load_data.clear()
-                                    st.rerun()
-                            else:
-                                load_data.clear()
-                                st.rerun()
-                        except Exception:
-                            st.error("通信エラー")
+            is_finished
