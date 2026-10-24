@@ -366,4 +366,4 @@ with tab2:
                         else:
                             st.rerun()
                     except Exception:
-                        st.error("通信
+                        st.error("通信エラー")
