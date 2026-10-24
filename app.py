@@ -140,7 +140,6 @@ except Exception:
         st.error("⚠️ 読込エラー。約1分待って再読み込みしてください。")
         st.stop()
 
-# 空白のKeyを除外して辞書化
 settings_dict = {k: v for k, v in zip(df['Key'], df['Value']) if k != ""}
 finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
@@ -152,13 +151,21 @@ else:
 
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
+# ==========================================
+# サイドバー：管理者メニュー
+# ==========================================
 st.sidebar.header("管理者メニュー")
-admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
+admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password", key="admin_pwd_input")
 is_admin = False
 
 if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
+    
+    # ★ 管理者メニューから抜けるボタン
+    if st.sidebar.button("🚪 管理者メニューから抜ける"):
+        st.session_state.admin_pwd_input = ""
+        st.rerun()
     
     st.sidebar.subheader("🏁 ゴールチェック設定")
     if finish_enabled:
@@ -190,11 +197,33 @@ if admin_pass == st.secrets["admin_password"]:
         except Exception as e:
             st.error(f"更新エラーが発生しました: {e}")
             
+    # ★ 手動時刻入力の復活
     st.sidebar.markdown("---")
-    st.sidebar.info("【確認用】現在の認識データ")
-    st.sidebar.write(settings_dict)
+    default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
+    manual_time = st.sidebar.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
+    
+    if st.sidebar.button("手動入力した時刻をセット"):
+        try:
+            today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
+            new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
+            update_setting_cell('start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
+            time.sleep(2.0)
+            load_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"更新エラーが発生しました: {e}")
+
+    # ★ 設定時刻の表示（未設定対応）
+    st.sidebar.markdown("---")
+    if start_time_val:
+        st.sidebar.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+    else:
+        st.sidebar.info("設定済:\n未設定")
 
 
+# ==========================================
+# メイン画面（タブ）
+# ==========================================
 tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 with tab1:
