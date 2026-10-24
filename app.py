@@ -9,15 +9,15 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（自動折り返し・文字サイズ大幅拡大） ---
+# --- UI最適化CSS（スマホでの縦落ち完全ブロック＆文字サイズ拡大） ---
 st.markdown("""
 <style>
-/* 1. 画面の余白を詰め、横スクロールを完全に防止 */
+/* 画面の余白を詰め、横揺れを防止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.3rem !important;
-    padding-right: 0.3rem !important;
+    padding-left: 0.2rem !important;
+    padding-right: 0.2rem !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
 }
@@ -25,29 +25,10 @@ header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* 2. 横並び設定: 画面幅を超えたら自動で下段に折り返す (wrap) */
-div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important; /* ★ここが重要: はみ出さずに下段へ落ちる */
-    align-items: stretch !important;
-    gap: 6px !important;
-    margin-bottom: 6px !important;
-    width: 100% !important;
-}
-
-/* 3. カラムの幅設定: スマホでも最低幅を確保しつつ並べる */
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    min-width: 95px !important; /* ★ボタンが潰れない最小幅。画面が狭いと自動で2列になる */
-    flex: 1 1 calc(33.333% - 6px) !important;
-    width: auto !important;
-    margin-bottom: 0px !important;
-}
-
-/* 4. ボタンのスタイル（文字サイズをさらに2段階拡大） */
+/* 全体のボタンベーススタイル（文字サイズ大幅拡大） */
 div[data-testid="column"] button {
     padding: 4px 2px !important;
-    font-size: 1.05rem !important; /* ★大幅拡大（前回の0.95 -> 1.05） */
+    font-size: 1.1rem !important; /* ★文字サイズ拡大 */
     font-weight: bold !important;
     line-height: 1.2 !important;
     width: 100% !important;
@@ -58,50 +39,64 @@ div[data-testid="column"] button {
     justify-content: center !important;
     white-space: normal !important;
     text-align: center !important;
-    box-sizing: border-box !important;
 }
 
-/* 5. ゴール済・DNFカード（文字サイズを2段階拡大） */
+/* ★ 1. タイトル＆更新ボタン行の横並び強制（70%:30%） */
+.title-box div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+}
+.title-box div[data-testid="column"]:nth-child(1) {
+    width: 70% !important; flex: 1 1 70% !important; min-width: 70% !important;
+}
+.title-box div[data-testid="column"]:nth-child(2) {
+    width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
+}
+
+/* ★ 2. ボタンの3列グリッド（スマホでも絶対に縦に崩さず3列を維持） */
+.grid-box div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+}
+.grid-box div[data-testid="column"] {
+    width: calc(33.333% - 4px) !important;
+    flex: 1 1 calc(33.333% - 4px) !important;
+    min-width: calc(33.333% - 4px) !important;
+    max-width: calc(33.333% - 4px) !important;
+}
+
+/* ★ 3. 管理者の取消ボタン付きカード行（75%:25%） */
+.admin-card-box div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+}
+.admin-card-box div[data-testid="column"]:nth-child(1) {
+    width: 75% !important; flex: 1 1 75% !important; min-width: 75% !important;
+}
+.admin-card-box div[data-testid="column"]:nth-child(2) {
+    width: 25% !important; flex: 1 1 25% !important; min-width: 25% !important;
+}
+
+/* ★ ゴール済・DNFカード（文字サイズ2段階拡大） */
 .finish-card {
-    background-color: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    box-sizing: border-box;
+    background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
+    padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    align-items: center; width: 100%; box-sizing: border-box;
 }
-.finish-no {
-    font-weight: bold;
-    color: #212529;
-    font-size: 1.15rem; /* ★大幅拡大 */
-}
-.finish-time {
-    color: #0f5132;
-    font-weight: bold;
-    font-size: 1.05rem; /* ★大幅拡大 */
-}
-.finish-clock {
-    color: #6c757d;
-    font-size: 0.95rem; /* ★拡大 */
-}
+.finish-no { font-weight: bold; color: #212529; font-size: 1.15rem; }
+.finish-time { color: #0f5132; font-weight: bold; font-size: 1.05rem; }
+.finish-clock { color: #6c757d; font-size: 0.95rem; }
+
 .dnf-card {
-    background-color: #fff3cd;
-    border: 1px solid #ffe69c;
-    border-radius: 6px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #664d03;
-    font-weight: bold;
-    font-size: 1.1rem; /* ★大幅拡大 */
-    width: 100%;
-    box-sizing: border-box;
+    background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
+    padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
+    align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
+    width: 100%; box-sizing: border-box;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -247,7 +242,6 @@ is_admin = False
 if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
-    
     if st.sidebar.button("🚪 管理者メニューから抜ける"):
         st.session_state.admin_pwd_input = ""
         st.rerun()
@@ -311,6 +305,7 @@ tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 # --- タブ1：スタートチェック ---
 with tab1:
+    st.markdown('<div class="title-box">', unsafe_allow_html=True)
     t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     if t_col2.button("🔄 更新", key="upd_start"):
@@ -319,8 +314,9 @@ with tab1:
             load_data.clear()
             st.rerun()
         else:
-            st.toast("⏳ 直前に最新化されたため、最新キャッシュを表示しました", icon="ℹ️")
+            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
             st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
     
@@ -345,16 +341,17 @@ with tab1:
         max_no = int(df['No'].max())
         range_options = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no + 1, 10)]
         selected_range_start = st.radio("番号帯(スタート)", range_options, horizontal=True, label_visibility="collapsed", key="r_start_radio")
-        
         if selected_range_start != "すべて":
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
 
     view_df = view_df.sort_values(by="No")
 
+    # 1. 未チェック（グリッド表示）
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【未チェック】タップしてスタート完了")
+        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(uncheck_df), grid_cols):
             cols = st.columns(grid_cols)
@@ -368,9 +365,12 @@ with tab1:
                         st.session_state.local_updates[f"start_{t_no}"] = True
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    # 管理者用：未チェックチームの棄権(DNS)登録
     if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【管理者用：出走前棄権(DNS)登録】")
+        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(uncheck_df), grid_cols):
             cols = st.columns(grid_cols)
@@ -385,7 +385,9 @@ with tab1:
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    # 2. チェック済み・DNSのチーム
     done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
@@ -422,6 +424,7 @@ with tab1:
 
 # --- タブ2：ゴールチェック ---
 with tab2:
+    st.markdown('<div class="title-box">', unsafe_allow_html=True)
     t_col3, t_col4 = st.columns([3, 1])
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     if t_col4.button("🔄 更新", key="upd_finish"):
@@ -430,8 +433,9 @@ with tab2:
             load_data.clear()
             st.rerun()
         else:
-            st.toast("⏳ 直前に最新化されたため、最新キャッシュを表示しました", icon="ℹ️")
+            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
             st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
     
     if not finish_enabled:
         st.warning("現在、ゴールチェック機能はロックされています。")
@@ -464,16 +468,17 @@ with tab2:
             max_no2 = int(df['No'].max())
             range_options2 = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no2 + 1, 10)]
             selected_range_finish = st.radio("番号帯(ゴール)", range_options2, horizontal=True, label_visibility="collapsed", key="r_finish_radio")
-            
             if selected_range_finish != "すべて":
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
 
         view_df2 = view_df2.sort_values(by="No")
 
+        # --- ① 未ゴール（3列グリッド） ---
         unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
+            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(unfinish_df), grid_cols):
                 cols = st.columns(grid_cols)
@@ -489,7 +494,9 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = now_str
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
+        # --- ② ゴール済み（1行1チーム） ---
         finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             if filter_finish == "すべて":
@@ -523,6 +530,7 @@ with tab2:
                 card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
 
                 if is_admin:
+                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
                     if col_btn.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
@@ -532,12 +540,15 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.markdown(card_html, unsafe_allow_html=True)
 
+        # --- ③ 管理者用：未ゴールチームの棄権(DNF)登録（3列グリッド） ---
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
+            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(unfinish_df), grid_cols):
                 cols = st.columns(grid_cols)
@@ -553,7 +564,9 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
+        # --- ④ すでにDNF（途中棄権）済みのチーム一覧 ---
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
@@ -562,6 +575,7 @@ with tab2:
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 if is_admin:
+                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
                     if col_btn.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
@@ -572,5 +586,6 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
