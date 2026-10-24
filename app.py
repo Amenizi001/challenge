@@ -12,33 +12,23 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
-    /* -------------------------------------
-       ボタン全体の基本設定（大きくする）
-    -------------------------------------- */
-    div.stButton > button {
+    /* ---------------------------------------------------
+       ★ メインアクション（未・ゴール）のボタンだけを大きくする
+       (type="primary" に指定されているボタンのみ適用)
+    ---------------------------------------------------- */
+    div.stButton > button[kind="primary"] {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    div.stButton > button p {
+    div.stButton > button[kind="primary"] p {
         font-size: 24px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
     }
     
-    /* -------------------------------------
-       ★特定のボタン（更新ボタンなど）だけ小さくする設定
-    -------------------------------------- */
-    div[data-testid="element-container"]:has(.small-btn-marker) + div[data-testid="element-container"] div.stButton > button {
-        padding: 6px 12px !important; 
-    }
-    div[data-testid="element-container"]:has(.small-btn-marker) + div[data-testid="element-container"] div.stButton > button p {
-        font-size: 16px !important; 
-        font-weight: normal !important;
-    }
-    
-    /* -------------------------------------
+    /* ---------------------------------------------------
        レイアウト調整用設定
-    -------------------------------------- */
+    ---------------------------------------------------- */
     .title-box div[data-testid="stHorizontalBlock"] {
         display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
     }
@@ -47,6 +37,7 @@ st.markdown("""
     }
     .title-box div[data-testid="column"]:nth-child(2) {
         width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
+        text-align: right;
     }
     .grid-box div[data-testid="stHorizontalBlock"] {
         display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important;
@@ -218,17 +209,14 @@ with tab1:
     t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
-    # ★ ここでマーカーを埋め込んで更新ボタンを小さくしています
-    with t_col2:
-        st.markdown('<div class="small-btn-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        if st.button("🔄 更新", key="upd_start", use_container_width=True):
-            st.session_state.local_updates.clear()
-            if time.time() - global_sync["last_read_time"] >= 5.0:
-                load_data.clear()
-                st.rerun()
-            else:
-                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-                st.rerun()
+    if t_col2.button("🔄 更新", key="upd_start"):
+        st.session_state.local_updates.clear()
+        if time.time() - global_sync["last_read_time"] >= 5.0:
+            load_data.clear()
+            st.rerun()
+        else:
+            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
@@ -345,17 +333,14 @@ with tab2:
     t_col3, t_col4 = st.columns([3, 1])
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     
-    # ★ ここでマーカーを埋め込んで更新ボタンを小さくしています
-    with t_col4:
-        st.markdown('<div class="small-btn-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        if st.button("🔄 更新", key="upd_finish", use_container_width=True):
-            st.session_state.local_updates.clear()
-            if time.time() - global_sync["last_read_time"] >= 5.0:
-                load_data.clear()
-                st.rerun()
-            else:
-                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-                st.rerun()
+    if t_col4.button("🔄 更新", key="upd_finish"):
+        st.session_state.local_updates.clear()
+        if time.time() - global_sync["last_read_time"] >= 5.0:
+            load_data.clear()
+            st.rerun()
+        else:
+            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     
     if not finish_enabled:
