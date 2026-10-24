@@ -147,6 +147,17 @@ st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
 
+# 【追加】設定キーが存在すれば上書き、なければ新しく行を追加する安全な関数
+def upsert_setting(df, key, value):
+    if key in df['Key'].values:
+        df.loc[df['Key'] == key, 'Value'] = str(value)
+    else:
+        new_row = {c: "" for c in df.columns}
+        new_row['Key'] = key
+        new_row['Value'] = str(value)
+        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    return df
+
 if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     is_admin = True
@@ -161,11 +172,12 @@ if admin_pass == st.secrets["admin_password"]:
         try:
             load_data.clear()
             latest_df = load_data()
-            latest_df.loc[latest_df['Key'] == 'finish_enabled', 'Value'] = str(new_finish_enabled)
+            # 修正：安全な設定更新関数を使用する
+            latest_df = upsert_setting(latest_df, 'finish_enabled', new_finish_enabled)
             if safe_update_data(latest_df):
                 st.rerun()
-        except Exception:
-            st.sidebar.error("通信エラー：少し待ってから再度お試しください。")
+        except Exception as e:
+            st.sidebar.error(f"通信エラー詳細: {e}")
     
     st.sidebar.subheader("⏱️ スタート時刻設定")
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
@@ -173,11 +185,12 @@ if admin_pass == st.secrets["admin_password"]:
             load_data.clear()
             latest_df = load_data()
             new_time = datetime.datetime.now(JST)
-            latest_df.loc[latest_df['Key'] == 'start_time', 'Value'] = new_time.strftime('%Y-%m-%d %H:%M:%S')
+            # 修正：安全な設定更新関数を使用する
+            latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
                 st.rerun()
-        except Exception:
-            st.sidebar.error("通信エラー：少し待ってから再度お試しください。")
+        except Exception as e:
+            st.sidebar.error(f"通信エラー詳細: {e}")
     
     st.sidebar.markdown("---")
     st.sidebar.write("または手動で設定：")
@@ -190,11 +203,12 @@ if admin_pass == st.secrets["admin_password"]:
             latest_df = load_data()
             today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-            latest_df.loc[latest_df['Key'] == 'start_time', 'Value'] = new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')
+            # 修正：安全な設定更新関数を使用する
+            latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
                 st.rerun()
-        except Exception:
-            st.sidebar.error("通信エラー：少し待ってから再度お試しください。")
+        except Exception as e:
+            st.sidebar.error(f"通信エラー詳細: {e}")
         
     st.sidebar.markdown("---")
     if start_time_val:
