@@ -70,7 +70,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ==========================================
 @st.cache_data(ttl=15)
 def load_data():
-    df = conn.read(worksheet="Data", ttl=0)
+    df = conn.read(worksheet="Data", ttl=15)
     
     if df is None or len(df) == 0:
         raise ValueError("スプレッドシートからデータが取得できませんでした")
