@@ -66,9 +66,21 @@ if not check_password():
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# ★ ローカルでの即時反映用の一時記憶領域
+# ★ ローカル一時記憶（即時UI反映用）
 if "local_updates" not in st.session_state:
     st.session_state.local_updates = {}
+
+# ★ エラー耐性用バックアップ
+if "last_valid_df" not in st.session_state:
+    st.session_state.last_valid_df = None
+
+# ★ 全ユーザー共有の更新インターバル管理（5秒制限ガード）
+@st.cache_resource
+def get_global_sync_manager():
+    return {"last_read_time": 0.0}
+
+global_sync = get_global_sync_manager()
+
 
 @st.cache_data(ttl=15)
 def load_data():
@@ -77,83 +89,118 @@ def load_data():
     if df is None or len(df) == 0:
         raise ValueError("データが取得できませんでした")
         
+    # ★【安全装置】列の並び順チェック（ピンポイント更新によるデータ破壊を防ぐ）
+    expected_cols = ['No', 'Start_Check', 'Finish_Check', 'Finish_Check_Time', 'DNF', 'DNS', 'Key', 'Value']
+    current_cols = list(df.columns)
+    
+    # 最初の8列が期待通りの順番かチェック
+    if current_cols[:8] != expected_cols:
+        st.error("⚠️ スプレッドシートの列構成が正しくありません。")
+        st.warning("【重要】ピンポイント更新を行うため、A列〜H列を以下の順序に修正してください。\n\n"
+                   "1. `No`\n2. `Start_Check`\n3. `Finish_Check`\n4. `Finish_Check_Time`\n5. `DNF`\n**6. `DNS` （※今回追加）**\n7. `Key`\n8. `Value`")
+        st.info("※E列(DNF)とF列(Key)の間に新しい列を挿入し、1行目に「DNS」と入力してください。")
+        st.stop()
+        
     if 'No' in df.columns:
         df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
-    else:
-        raise ValueError("シートに 'No' 列が存在しません")
 
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
     df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
-    
-    if 'DNF' not in df.columns:
-        df['DNF'] = False
-    else:
-        df['DNF'] = df['DNF'].fillna(False).astype(bool)
-    
-    if 'Key' not in df.columns:
-        df['Key'] = ""
-    if 'Value' not in df.columns:
-        df['Value'] = ""
-        
+    df['DNF'] = df['DNF'].fillna(False).astype(bool)
+    df['DNS'] = df['DNS'].fillna(False).astype(bool)
     df['Key'] = df['Key'].fillna("").astype(str)
     df['Value'] = df['Value'].fillna("").astype(str)
     
+    global_sync["last_read_time"] = time.time()
     return df
 
 
-def safe_update_data(new_df):
-    if new_df is None or len(new_df) == 0:
-        st.error("データが空のため、書き込み中止")
-        return False
-    if 'No' not in new_df.columns:
-        st.error("不正なデータ構造のため、書き込み中止")
-        return False
-        
-    save_df = new_df.copy()
-    save_df['Key'] = save_df['Key'].fillna("").astype(str)
-    save_df['Value'] = save_df['Value'].fillna("").astype(str)
-    save_df['Finish_Check_Time'] = save_df['Finish_Check_Time'].fillna("").astype(str)
-    
-    conn.update(worksheet="Data", data=save_df)
+# --- セル単位ピンポイント更新関数群 ---
+def get_worksheet():
+    client = conn._instance
+    spreadsheet = client.open_by_url(st.secrets.connections.gsheets.spreadsheet)
+    return spreadsheet.worksheet("Data")
+
+def update_start_cell(no: int, checked: bool):
+    """Start_Check（B列）のみをピンポイント更新"""
+    ws = get_worksheet()
+    row = no + 1
+    ws.update_cell(row, 2, checked)
+    return True
+
+def update_dns_cells(no: int, dns: bool):
+    """DNS登録・取消（B列のStart_Check=False、F列のDNSを更新）"""
+    ws = get_worksheet()
+    row = no + 1
+    # B列: Start_Check を False にリセット
+    ws.update_cell(row, 2, False)
+    # F列: DNS を更新 (6列目)
+    ws.update_cell(row, 6, dns)
+    return True
+
+def update_finish_cells(no: int, checked: bool, time_str: str):
+    """Finish_Check（C列）と Finish_Check_Time（D列）のみをピンポイント更新"""
+    ws = get_worksheet()
+    row = no + 1
+    ws.update(f"C{row}:D{row}", [[checked, time_str]])
+    return True
+
+def update_dnf_cells(no: int, dnf: bool, finish_check: bool, time_str: str):
+    """DNF関連（C列〜E列）のみをピンポイント更新"""
+    ws = get_worksheet()
+    row = no + 1
+    ws.update(f"C{row}:E{row}", [[finish_check, time_str, dnf]])
+    return True
+
+def update_setting_cell(key: str, value: str):
+    """設定値（Key/Value列）をピンポイント更新"""
+    ws = get_worksheet()
+    headers = ws.row_values(1)
+    key_col_idx = headers.index('Key') + 1 if 'Key' in headers else 7
+    val_col_idx = key_col_idx + 1
+
+    cell = ws.find(key, in_column=key_col_idx)
+    if cell:
+        ws.update_cell(cell.row, val_col_idx, str(value))
+    else:
+        all_keys = ws.col_values(key_col_idx)
+        next_row = len(all_keys) + 1
+        ws.update_cell(next_row, key_col_idx, key)
+        ws.update_cell(next_row, val_col_idx, str(value))
     return True
 
 
+# --- データ取得 & エラー耐性 ---
+api_limit_mode = False
 try:
     df = load_data()
-    settings_dict = dict(zip(df['Key'], df['Value']))
-    finish_enabled = str(settings_dict.get('finish_enabled', 'False')).lower() == 'true'
-    
-    start_time_str = str(settings_dict.get('start_time', ''))
-    if start_time_str and start_time_str.lower() != 'nan':
-        start_time_val = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+    st.session_state.last_valid_df = df.copy()
+except Exception:
+    if st.session_state.last_valid_df is not None:
+        df = st.session_state.last_valid_df.copy()
+        api_limit_mode = True
     else:
-        start_time_val = None
-        
-except Exception as e:
-    if "429" in str(e) or "RATE_LIMIT_EXCEEDED" in str(e):
-        st.error("⚠️ アクセス集中によるAPI制限中です。")
-        st.warning("約1分ほど待ってから再読み込みしてください。")
-    else:
-        st.error(f"データ読み込みエラー: {e}")
-    st.stop()
+        st.error("⚠️ アクセス集中によるAPI制限中です。約1分待ってから再読み込みしてください。")
+        st.stop()
+
+settings_dict = dict(zip(df['Key'], df['Value']))
+finish_enabled = str(settings_dict.get('finish_enabled', 'False')).lower() == 'true'
+
+start_time_str = str(settings_dict.get('start_time', ''))
+if start_time_str and start_time_str.lower() != 'nan':
+    start_time_val = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+else:
+    start_time_val = None
+
+if api_limit_mode:
+    st.warning("⚠️ API通信制限中のため、直前のデータを表示しています（数分後に自動復旧します）")
 
 
 # --- サイドバー：管理者設定 ---
 st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
-
-def upsert_setting(target_df, key, value):
-    mask = target_df['Key'] == key
-    if mask.any():
-        target_df.loc[mask, 'Value'] = str(value)
-    else:
-        new_row = {c: "" for c in target_df.columns}
-        new_row['Key'] = key
-        new_row['Value'] = str(value)
-        target_df = pd.concat([target_df, pd.DataFrame([new_row])], ignore_index=True)
-    return target_df
 
 if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
@@ -171,29 +218,23 @@ if admin_pass == st.secrets["admin_password"]:
         
     if st.sidebar.button(btn_label):
         try:
+            update_setting_cell('finish_enabled', new_status)
+            time.sleep(2.0)
             load_data.clear()
-            latest_df = load_data()
-            latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
-            if safe_update_data(latest_df):
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
+            st.rerun()
         except Exception:
-            st.sidebar.error("通信エラー")
+            st.toast("⚠️ 通信制限中です。少し待ってから再度お試しください", icon="⚠️")
     
     st.sidebar.subheader("⏱️ スタート時刻設定")
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
         try:
+            new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+            update_setting_cell('start_time', new_time)
+            time.sleep(2.0)
             load_data.clear()
-            latest_df = load_data()
-            new_time = datetime.datetime.now(JST)
-            latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
-            if safe_update_data(latest_df):
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
+            st.rerun()
         except Exception:
-            st.sidebar.error("通信エラー")
+            st.toast("⚠️ 通信制限中です。少し待ってから再度お試しください", icon="⚠️")
     
     st.sidebar.markdown("---")
     default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
@@ -201,17 +242,14 @@ if admin_pass == st.secrets["admin_password"]:
     
     if st.sidebar.button("手動入力した時刻をセット"):
         try:
-            load_data.clear()
-            latest_df = load_data()
             today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-            latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
-            if safe_update_data(latest_df):
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
+            update_setting_cell('start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
+            time.sleep(2.0)
+            load_data.clear()
+            st.rerun()
         except Exception:
-            st.sidebar.error("通信エラー")
+            st.toast("⚠️ 通信制限中です。少し待ってから再度お試しください", icon="⚠️")
         
     st.sidebar.markdown("---")
     if start_time_val:
@@ -227,17 +265,25 @@ tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 with tab1:
     h_col1, h_col2 = st.columns([2.5, 1])
     h_col1.markdown("#### 🚩 スタート")
+    
     if h_col2.button("🔄 更新", key="upd_start"):
-        st.session_state.local_updates.clear() # ★同期ズレを完全にリセット
-        load_data.clear()
-        st.rerun()
+        st.session_state.local_updates.clear()
+        now_ts = time.time()
+        if now_ts - global_sync["last_read_time"] >= 5.0:
+            load_data.clear()
+            st.rerun()
+        else:
+            st.toast("⏳ 直前に最新化されたため、最新キャッシュを表示しました", icon="ℹ️")
+            st.rerun()
         
-    filter_start = st.radio("フィルター(スタート)", ["すべて", "未チェック", "チェック済"], horizontal=True, label_visibility="collapsed", key="f_start")
+    filter_start = st.radio("フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
     
     if filter_start == "未チェック":
-        view_df = df[~df['Start_Check']]
+        view_df = df[(~df['Start_Check']) & (~df['DNS'])]
     elif filter_start == "チェック済":
         view_df = df[df['Start_Check']]
+    elif filter_start == "DNS(棄権)":
+        view_df = df[df['DNS']]
     else:
         view_df = df
         
@@ -255,48 +301,71 @@ with tab1:
 
     for _, row in view_df.iterrows():
         t_no = int(row['No'])
-        col1, col2 = st.columns([1, 2.5])
-        col1.markdown(f"**No.{t_no:03d}**")
         
-        # ★ 即時反映ロジック（スプレッドシートが遅れていても、ローカルの操作履歴を優先表示する）
+        # ローカル一時記憶の優先適用
         is_start = row['Start_Check']
+        is_dns = row['DNS']
         if f"start_{t_no}" in st.session_state.local_updates:
             is_start = st.session_state.local_updates[f"start_{t_no}"]
+        if f"dns_{t_no}" in st.session_state.local_updates:
+            is_dns = st.session_state.local_updates[f"dns_{t_no}"]
         
-        if is_start:
+        # カラム配置（管理者かつ未スタートの場合はDNS登録ボタン用カラムを追加）
+        if is_admin and (not is_start) and (not is_dns):
+            col1, col2, col3 = st.columns([1, 1.8, 1.8])
+        else:
+            col1, col2 = st.columns([1, 2.5])
+            col3 = None
+
+        col1.markdown(f"**No.{t_no:03d}**")
+        
+        # 1. DNS（出走前棄権）状態
+        if is_dns:
+            if is_admin:
+                if col2.button("↩️ 取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                    try:
+                        update_dns_cells(t_no, False)
+                        st.session_state.local_updates[f"dns_{t_no}"] = False
+                        st.session_state.local_updates[f"start_{t_no}"] = False
+                        st.rerun()
+                    except Exception:
+                        st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
+            else:
+                col2.button("🚫 DNS", key=f"dns_done_{t_no}", disabled=True)
+                
+        # 2. スタートチェック済状態
+        elif is_start:
             if is_admin:
                 if col2.button("❌ 取消", key=f"start_cancel_{t_no}", type="secondary"):
                     try:
-                        load_data.clear()
-                        latest_df = load_data()
-                        latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
-                        if safe_update_data(latest_df):
-                            st.session_state.local_updates[f"start_{t_no}"] = False # ローカルも取消状態に
-                            load_data.clear()
-                            st.rerun()
+                        update_start_cell(t_no, False)
+                        st.session_state.local_updates[f"start_{t_no}"] = False
+                        st.rerun()
                     except Exception:
-                        st.error("通信エラー")
+                        st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
             else:
                 col2.button("✅ 済", key=f"start_done_{t_no}", disabled=True)
                 
+        # 3. 未チェック状態
         else:
             if col2.button("チェック", key=f"start_btn_{t_no}", type="primary"):
                 try:
-                    load_data.clear()
-                    latest_df = load_data()
-                    match_row = latest_df[latest_df['No'] == t_no]
-                    if not match_row.empty and not match_row['Start_Check'].values[0]:
-                        latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = True
-                        if safe_update_data(latest_df):
-                            st.session_state.local_updates[f"start_{t_no}"] = True # 即座に✅済に変える
-                            load_data.clear()
-                            st.rerun()
-                    else:
-                        st.session_state.local_updates[f"start_{t_no}"] = True
-                        load_data.clear()
-                        st.rerun()
+                    update_start_cell(t_no, True)
+                    st.session_state.local_updates[f"start_{t_no}"] = True
+                    st.rerun()
                 except Exception:
-                    st.error("通信エラー")
+                    st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
+            
+            # 管理者限定：出走前棄権（DNS）ボタン
+            if is_admin and col3 is not None:
+                if col3.button("🚫 棄権", key=f"dns_btn_{t_no}", type="secondary"):
+                    try:
+                        update_dns_cells(t_no, True)
+                        st.session_state.local_updates[f"dns_{t_no}"] = True
+                        st.session_state.local_updates[f"start_{t_no}"] = False
+                        st.rerun()
+                    except Exception:
+                        st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
 
 
 # ==========================================
@@ -305,15 +374,22 @@ with tab1:
 with tab2:
     h_col3, h_col4 = st.columns([2.5, 1])
     h_col3.markdown("#### 🏁 ゴール")
+    
     if h_col4.button("🔄 更新", key="upd_finish"):
-        st.session_state.local_updates.clear() # ★同期ズレを完全にリセット
-        load_data.clear()
-        st.rerun()
+        st.session_state.local_updates.clear()
+        now_ts = time.time()
+        if now_ts - global_sync["last_read_time"] >= 5.0:
+            load_data.clear()
+            st.rerun()
+        else:
+            st.toast("⏳ 直前に最新化されたため、最新キャッシュを表示しました", icon="ℹ️")
+            st.rerun()
     
     if not finish_enabled:
         st.warning("現在、ゴールチェック機能はロックされています。")
     else:
-        started_df = df[df['Start_Check']]
+        # DNS（出走前棄権）はスタートしていないためゴールチェックから除外
+        started_df = df[df['Start_Check'] & (~df['DNS'])]
         
         filter_finish = st.radio("フィルター(ゴール)", ["すべて", "未ゴール", "ゴール済 (DNF含)"], horizontal=True, label_visibility="collapsed", key="f_finish")
         
@@ -339,7 +415,6 @@ with tab2:
         for _, row in view_df2.iterrows():
             t_no = int(row['No'])
             
-            # ★ 即時反映ロジック
             is_dnf = row['DNF']
             is_finished = row['Finish_Check']
             f_time_str = str(row['Finish_Check_Time'])
@@ -363,19 +438,13 @@ with tab2:
                 if is_admin:
                     if col2.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            latest_df.loc[latest_df['No'] == t_no, 'DNF'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                            if safe_update_data(latest_df):
-                                st.session_state.local_updates[f"dnf_{t_no}"] = False
-                                st.session_state.local_updates[f"finish_{t_no}"] = False
-                                st.session_state.local_updates[f"time_{t_no}"] = ""
-                                load_data.clear()
-                                st.rerun()
+                            update_dnf_cells(t_no, False, False, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = False
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
                         except Exception:
-                            st.error("通信エラー")
+                            st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
                 else:
                     col2.button("棄権済", key=f"dnf_done_{t_no}", disabled=True)
                 
@@ -385,17 +454,12 @@ with tab2:
                 if is_admin:
                     if col2.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                            if safe_update_data(latest_df):
-                                st.session_state.local_updates[f"finish_{t_no}"] = False
-                                st.session_state.local_updates[f"time_{t_no}"] = ""
-                                load_data.clear()
-                                st.rerun()
+                            update_finish_cells(t_no, False, "")
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
                         except Exception:
-                            st.error("通信エラー")
+                            st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
                 else:
                     col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
                 
@@ -415,43 +479,23 @@ with tab2:
             else:
                 if col2.button("🏁 ゴール", key=f"finish_btn_{t_no}", type="primary"):
                     try:
-                        load_data.clear()
-                        latest_df = load_data()
-                        match_row = latest_df[latest_df['No'] == t_no]
-                        if not match_row.empty and not match_row['Finish_Check'].values[0]:
-                            now_jst = datetime.datetime.now(JST)
-                            now_str = now_jst.strftime('%H:%M:%S')
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
-                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = now_str
-                            if safe_update_data(latest_df):
-                                st.session_state.local_updates[f"finish_{t_no}"] = True
-                                st.session_state.local_updates[f"time_{t_no}"] = now_str
-                                load_data.clear()
-                                st.rerun()
-                        else:
-                            load_data.clear()
-                            st.rerun()
+                        now_jst = datetime.datetime.now(JST)
+                        now_str = now_jst.strftime('%H:%M:%S')
+                        update_finish_cells(t_no, True, now_str)
+                        st.session_state.local_updates[f"finish_{t_no}"] = True
+                        st.session_state.local_updates[f"time_{t_no}"] = now_str
+                        st.rerun()
                     except Exception:
-                        st.error("通信エラー")
+                        st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
                 
+                # 管理者限定：競技途中棄権（DNF）ボタン
                 if is_admin and col3 is not None:
                     if col3.button("⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
                         try:
-                            load_data.clear()
-                            latest_df = load_data()
-                            match_row = latest_df[latest_df['No'] == t_no]
-                            if not match_row.empty and not match_row['DNF'].values[0]:
-                                latest_df.loc[latest_df['No'] == t_no, 'DNF'] = True
-                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
-                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
-                                if safe_update_data(latest_df):
-                                    st.session_state.local_updates[f"dnf_{t_no}"] = True
-                                    st.session_state.local_updates[f"finish_{t_no}"] = True
-                                    st.session_state.local_updates[f"time_{t_no}"] = ""
-                                    load_data.clear()
-                                    st.rerun()
-                            else:
-                                load_data.clear()
-                                st.rerun()
+                            update_dnf_cells(t_no, True, True, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = True
+                            st.session_state.local_updates[f"finish_{t_no}"] = True
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
                         except Exception:
-                            st.error("通信エラー")
+                            st.toast("⚠️ 通信制限中です。少し待ってから再度押してください", icon="⚠️")
