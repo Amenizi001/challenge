@@ -9,12 +9,12 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（上部余白削除、横並び1段強制、ボタン高さ統一、フィルター2段組） ---
+# --- UI最適化CSS（スマホでの縦落ちを強制解除・横スクロール化） ---
 st.markdown("""
 <style>
 /* 1. タブ上部の空白を極限まで詰める */
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
@@ -23,24 +23,37 @@ header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* 2. 横並び（1段）の強制・垂直中央揃え */
+/* 2. Streamlit標準のカラム自動折り返し（縦並び化）をスマホでも強制解除 */
 div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
+    flex-wrap: nowrap !important;
     align-items: center !important;
     gap: 4px !important;
-    margin-bottom: 2px !important;
+    margin-bottom: 3px !important;
 }
 div[data-testid="column"] {
     min-width: 0 !important;
+    flex: 1 1 0% !important;
     margin-bottom: 0px !important;
-    flex: 1 1 auto !important;
 }
 
-/* 3. ボタンのコンパクト化と文字自動改行対応 */
+/* 3. 番号帯フィルター専用の横スクロールラッパー */
+.range-scroll-box div[data-testid="stHorizontalBlock"] {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    padding-bottom: 6px !important;
+    -webkit-overflow-scrolling: touch;
+}
+.range-scroll-box div[data-testid="column"] {
+    flex: 0 0 58px !important; /* ボタンの幅を固定して横スクロールさせる */
+    min-width: 58px !important;
+}
+
+/* 4. ボタンのコンパクト化と2行表示対応 */
 div[data-testid="column"] button {
-    padding: 3px 4px !important;
-    font-size: 0.78rem !important;
+    padding: 2px 2px !important;
+    font-size: 0.72rem !important;
     line-height: 1.15 !important;
     width: 100% !important;
     min-height: 38px !important;
@@ -49,9 +62,10 @@ div[data-testid="column"] button {
     align-items: center !important;
     justify-content: center !important;
     white-space: normal !important;
+    text-align: center !important;
 }
 
-/* 4. ゴールタイム表示枠の高さをボタン（38px）にピッタリ合わせる */
+/* 5. ゴールタイム表示枠の高さをボタン（38px）に完全に一致させる */
 .time-badge {
     background-color: #d1e7dd;
     color: #0f5132;
@@ -64,11 +78,11 @@ div[data-testid="column"] button {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     line-height: 1.15;
     text-align: center;
     width: 100%;
-    padding: 0 2px;
+    padding: 0 1px;
 }
 .dnf-badge {
     background-color: #f8d7da;
@@ -83,21 +97,6 @@ div[data-testid="column"] button {
     font-size: 0.75rem;
     font-weight: bold;
     width: 100%;
-}
-
-/* 5. フィルターボタン（2段表示・1段横並び・横スクロール） */
-.filter-container {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    white-space: nowrap;
-    gap: 4px;
-    padding-bottom: 4px;
-    margin-bottom: 6px;
-    -webkit-overflow-scrolling: touch;
-}
-.filter-container::-webkit-scrollbar {
-    display: none;
 }
 </style>
 """, unsafe_allow_html=True)
