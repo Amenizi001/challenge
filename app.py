@@ -9,15 +9,15 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（横スクロール完全防止・縦スクロールのみに最適化） ---
+# --- UI最適化CSS（スマホ強制3列横並び ＆ 文字サイズ拡大） ---
 st.markdown("""
 <style>
-/* 画面の余白を詰め、横スクロールを完全に禁止 */
+/* 1. 画面全体の余白調整と横スクロール防止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
+    padding-left: 0.4rem !important;
+    padding-right: 0.4rem !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
 }
@@ -25,14 +25,33 @@ header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* ボタンの高さと文字サイズの統一（画面幅にフィット） */
+/* 2. スマホでの横並びカラムの縦落ち（幅100%化）を強制解除 */
+div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+    width: 100% !important;
+}
+
+/* 3列カラムの横幅を均等に強制固定 */
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    margin-bottom: 0px !important;
+}
+
+/* 3. ボタンのスタイル（文字サイズを約2段階アップ: 0.75rem -> 0.95rem） */
 div[data-testid="column"] button {
-    padding: 4px 1px !important;
-    font-size: 0.75rem !important;
+    padding: 2px 1px !important;
+    font-size: 0.95rem !important;
+    font-weight: bold !important;
     line-height: 1.15 !important;
     width: 100% !important;
-    min-height: 40px !important;
-    height: 40px !important;
+    min-height: 44px !important;
+    height: 44px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -41,45 +60,45 @@ div[data-testid="column"] button {
     box-sizing: border-box !important;
 }
 
-/* ゴール済・DNFカード（1段1チーム用） */
+/* 4. ゴール済カード（文字サイズを約2段階アップ） */
 .finish-card {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 6px;
-    padding: 6px 8px;
-    margin-bottom: 4px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.78rem;
     width: 100%;
     box-sizing: border-box;
 }
 .finish-no {
     font-weight: bold;
     color: #212529;
-    font-size: 0.85rem;
+    font-size: 1.05rem; /* 拡大 */
 }
 .finish-time {
     color: #0f5132;
     font-weight: bold;
+    font-size: 0.95rem; /* 拡大 */
 }
 .finish-clock {
     color: #6c757d;
-    font-size: 0.72rem;
+    font-size: 0.85rem; /* 拡大 */
 }
 .dnf-card {
     background-color: #fff3cd;
     border: 1px solid #ffe69c;
     border-radius: 6px;
-    padding: 6px 8px;
-    margin-bottom: 4px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     color: #664d03;
     font-weight: bold;
-    font-size: 0.78rem;
+    font-size: 0.95rem; /* 拡大 */
     width: 100%;
     box-sizing: border-box;
 }
@@ -368,7 +387,7 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 2. チェック済み・DNSのチーム（下段に昇順で表示）
+    # 2. チェック済み・DNSのチーム（下段に昇順表示）
     done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
