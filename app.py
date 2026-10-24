@@ -9,15 +9,15 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS（スマホ強制3列横並び ＆ 文字サイズ拡大） ---
+# --- UI最適化CSS（自動折り返し・文字サイズ大幅拡大） ---
 st.markdown("""
 <style>
-/* 1. 画面全体の余白調整と横スクロール防止 */
+/* 1. 画面の余白を詰め、横スクロールを完全に防止 */
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.4rem !important;
-    padding-right: 0.4rem !important;
+    padding-left: 0.3rem !important;
+    padding-right: 0.3rem !important;
     max-width: 100% !important;
     overflow-x: hidden !important;
 }
@@ -25,33 +25,34 @@ header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* 2. スマホでの横並びカラムの縦落ち（幅100%化）を強制解除 */
+/* 2. 横並び設定: 画面幅を超えたら自動で下段に折り返す (wrap) */
 div[data-testid="stHorizontalBlock"] {
     display: flex !important;
     flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    gap: 4px !important;
-    margin-bottom: 4px !important;
+    flex-wrap: wrap !important; /* ★ここが重要: はみ出さずに下段へ落ちる */
+    align-items: stretch !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
     width: 100% !important;
 }
 
-/* 3列カラムの横幅を均等に強制固定 */
+/* 3. カラムの幅設定: スマホでも最低幅を確保しつつ並べる */
 div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-    min-width: 0 !important;
-    flex: 1 1 0% !important;
+    min-width: 95px !important; /* ★ボタンが潰れない最小幅。画面が狭いと自動で2列になる */
+    flex: 1 1 calc(33.333% - 6px) !important;
+    width: auto !important;
     margin-bottom: 0px !important;
 }
 
-/* 3. ボタンのスタイル（文字サイズを約2段階アップ: 0.75rem -> 0.95rem） */
+/* 4. ボタンのスタイル（文字サイズをさらに2段階拡大） */
 div[data-testid="column"] button {
-    padding: 2px 1px !important;
-    font-size: 0.95rem !important;
+    padding: 4px 2px !important;
+    font-size: 1.05rem !important; /* ★大幅拡大（前回の0.95 -> 1.05） */
     font-weight: bold !important;
-    line-height: 1.15 !important;
+    line-height: 1.2 !important;
     width: 100% !important;
-    min-height: 44px !important;
-    height: 44px !important;
+    min-height: 48px !important;
+    height: 100% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -60,13 +61,13 @@ div[data-testid="column"] button {
     box-sizing: border-box !important;
 }
 
-/* 4. ゴール済カード（文字サイズを約2段階アップ） */
+/* 5. ゴール済・DNFカード（文字サイズを2段階拡大） */
 .finish-card {
     background-color: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 6px;
     padding: 8px 10px;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -76,29 +77,29 @@ div[data-testid="column"] button {
 .finish-no {
     font-weight: bold;
     color: #212529;
-    font-size: 1.05rem; /* 拡大 */
+    font-size: 1.15rem; /* ★大幅拡大 */
 }
 .finish-time {
     color: #0f5132;
     font-weight: bold;
-    font-size: 0.95rem; /* 拡大 */
+    font-size: 1.05rem; /* ★大幅拡大 */
 }
 .finish-clock {
     color: #6c757d;
-    font-size: 0.85rem; /* 拡大 */
+    font-size: 0.95rem; /* ★拡大 */
 }
 .dnf-card {
     background-color: #fff3cd;
     border: 1px solid #ffe69c;
     border-radius: 6px;
     padding: 8px 10px;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     color: #664d03;
     font-weight: bold;
-    font-size: 0.95rem; /* 拡大 */
+    font-size: 1.1rem; /* ★大幅拡大 */
     width: 100%;
     box-sizing: border-box;
 }
@@ -351,7 +352,6 @@ with tab1:
 
     view_df = view_df.sort_values(by="No")
 
-    # 1. 未チェック（上段に3列グリッド表示）
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【未チェック】タップしてスタート完了")
@@ -369,7 +369,6 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 管理者用：未チェックチームの棄権(DNS)登録
     if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【管理者用：出走前棄権(DNS)登録】")
         grid_cols = 3
@@ -387,7 +386,6 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 2. チェック済み・DNSのチーム（下段に昇順表示）
     done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
@@ -473,7 +471,6 @@ with tab2:
 
         view_df2 = view_df2.sort_values(by="No")
 
-        # --- ① 最上段：未ゴールチームの「001:ゴール」ボタン群（3列グリッド） ---
         unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
@@ -493,7 +490,6 @@ with tab2:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
 
-        # --- ② 中段：ゴール済みチームの一覧（1行1チーム表示・番号昇順） ---
         finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             if filter_finish == "すべて":
@@ -539,7 +535,6 @@ with tab2:
                 else:
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群（3列グリッド） ---
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
@@ -559,7 +554,6 @@ with tab2:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
 
-        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧 ---
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
