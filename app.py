@@ -12,33 +12,14 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
-.block-container {
-    padding-top: 0.5rem !important;
-    padding-bottom: 2rem !important;
-    padding-left: 0.2rem !important;
-    padding-right: 0.2rem !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-}
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-/* ボタン本体の余白・高さ */
-div[data-testid="column"] button,
-div[data-testid="column"] button*{
-    font-size: 1.4rem !important;
-    padding: 4px 2px !important;
-    font-weight: bold !important;
-    line-height: 1.2 !important;
-    width: 100% !important;
-    min-height: 48px !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    white-space: normal !important;
-    text-align: center !important;
-}
+    div.stButton > button {
+        font-size: 20px !important; 
+        font-weight: bold !important; 
+        padding: 15px 20px !important; 
+        height: auto !important; 
+    }
+</style>
+""", unsafe_allow_html=True)
 
 .title-box div[data-testid="stHorizontalBlock"] {
     display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
