@@ -147,7 +147,7 @@ except Exception:
         st.error("⚠️ 読込エラー。約1分待って再読み込みしてください。")
         st.stop()
 
-settings_dict = dict(zip(df['Key'], df['Value']))
+settings_dict = {k: v for k, v in zip(df['Key'], df['Value']) if k != ""}
 finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
 start_time_str = str(settings_dict.get('start_time', ''))
@@ -270,7 +270,7 @@ with tab1:
                 
         elif is_start:
             if is_admin:
-                if col2.button("❌ 取消", key=f"start_cancel_{t_no}", type="secondary"):
+                if col2.button("❌ スタートチェック取消", key=f"start_cancel_{t_no}", type="secondary"):
                     try:
                         update_start_cell(t_no, False)
                         st.session_state.local_updates[f"start_{t_no}"] = False
@@ -351,7 +351,7 @@ with tab2:
             
             if is_dnf:
                 if is_admin:
-                    if col2.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                    if col2.button("↩️ 棄権取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
                             st.session_state.local_updates[f"dnf_{t_no}"] = False
@@ -364,7 +364,7 @@ with tab2:
                 
             elif is_finished:
                 if is_admin:
-                    if col2.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                    if col2.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
                             update_finish_cells(t_no, False, "")
                             st.session_state.local_updates[f"finish_{t_no}"] = False
