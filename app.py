@@ -37,7 +37,7 @@ div[data-testid="column"] div[data-testid="stAlert"] {
 """, unsafe_allow_html=True)
 
 
-# --- アプリ全体のパスワード認証（リロード保持対応） ---
+# --- アプリ全体のパスワード認証 ---
 def check_password():
     query_auth = st.query_params.get("auth")
     if query_auth == st.secrets["app_password"]:
@@ -65,6 +65,10 @@ if not check_password():
 
 # --- スプレッドシート接続 ---
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# ★ ローカルでの即時反映用の一時記憶領域
+if "local_updates" not in st.session_state:
+    st.session_state.local_updates = {}
 
 @st.cache_data(ttl=15)
 def load_data():
@@ -112,7 +116,6 @@ def safe_update_data(new_df):
     save_df['Finish_Check_Time'] = save_df['Finish_Check_Time'].fillna("").astype(str)
     
     conn.update(worksheet="Data", data=save_df)
-    # ここにあった一律の待機時間を削除し、ボタン側へ移動しました
     return True
 
 
@@ -172,10 +175,10 @@ if admin_pass == st.secrets["admin_password"]:
             latest_df = load_data()
             latest_df = upsert_setting(latest_df, 'finish_enabled', new_status)
             if safe_update_data(latest_df):
-                time.sleep(2.0)  # 管理者設定は確実に2秒待機
+                time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
-        except Exception as e:
+        except Exception:
             st.sidebar.error("通信エラー")
     
     st.sidebar.subheader("⏱️ スタート時刻設定")
@@ -186,10 +189,10 @@ if admin_pass == st.secrets["admin_password"]:
             new_time = datetime.datetime.now(JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_time.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
-                time.sleep(2.0)  # 管理者設定は確実に2秒待機
+                time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
-        except Exception as e:
+        except Exception:
             st.sidebar.error("通信エラー")
     
     st.sidebar.markdown("---")
@@ -204,10 +207,10 @@ if admin_pass == st.secrets["admin_password"]:
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
             latest_df = upsert_setting(latest_df, 'start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
             if safe_update_data(latest_df):
-                time.sleep(2.0)  # 管理者設定は確実に2秒待機
+                time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
-        except Exception as e:
+        except Exception:
             st.sidebar.error("通信エラー")
         
     st.sidebar.markdown("---")
@@ -225,6 +228,7 @@ with tab1:
     h_col1, h_col2 = st.columns([2.5, 1])
     h_col1.markdown("#### 🚩 スタート")
     if h_col2.button("🔄 更新", key="upd_start"):
+        st.session_state.local_updates.clear() # ★同期ズレを完全にリセット
         load_data.clear()
         st.rerun()
         
@@ -254,24 +258,29 @@ with tab1:
         col1, col2 = st.columns([1, 2.5])
         col1.markdown(f"**No.{t_no:03d}**")
         
-        if row['Start_Check']:
+        # ★ 即時反映ロジック（スプレッドシートが遅れていても、ローカルの操作履歴を優先表示する）
+        is_start = row['Start_Check']
+        if f"start_{t_no}" in st.session_state.local_updates:
+            is_start = st.session_state.local_updates[f"start_{t_no}"]
+        
+        if is_start:
             if is_admin:
-                if col2.button("❌ 取消", key=f"start_{t_no}", type="secondary"):
+                if col2.button("❌ 取消", key=f"start_cancel_{t_no}", type="secondary"):
                     try:
                         load_data.clear()
                         latest_df = load_data()
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
                         if safe_update_data(latest_df):
-                            time.sleep(0.3)  # ★ 通常操作はサクサク進む0.3秒
+                            st.session_state.local_updates[f"start_{t_no}"] = False # ローカルも取消状態に
                             load_data.clear()
                             st.rerun()
                     except Exception:
                         st.error("通信エラー")
             else:
-                col2.button("✅ 済", key=f"start_{t_no}", disabled=True)
+                col2.button("✅ 済", key=f"start_done_{t_no}", disabled=True)
                 
         else:
-            if col2.button("チェック", key=f"start_{t_no}", type="primary"):
+            if col2.button("チェック", key=f"start_btn_{t_no}", type="primary"):
                 try:
                     load_data.clear()
                     latest_df = load_data()
@@ -279,10 +288,11 @@ with tab1:
                     if not match_row.empty and not match_row['Start_Check'].values[0]:
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = True
                         if safe_update_data(latest_df):
-                            time.sleep(0.3)  # ★ 通常操作はサクサク進む0.3秒
+                            st.session_state.local_updates[f"start_{t_no}"] = True # 即座に✅済に変える
                             load_data.clear()
                             st.rerun()
                     else:
+                        st.session_state.local_updates[f"start_{t_no}"] = True
                         load_data.clear()
                         st.rerun()
                 except Exception:
@@ -296,6 +306,7 @@ with tab2:
     h_col3, h_col4 = st.columns([2.5, 1])
     h_col3.markdown("#### 🏁 ゴール")
     if h_col4.button("🔄 更新", key="upd_finish"):
+        st.session_state.local_updates.clear() # ★同期ズレを完全にリセット
         load_data.clear()
         st.rerun()
     
@@ -327,5 +338,120 @@ with tab2:
             
         for _, row in view_df2.iterrows():
             t_no = int(row['No'])
+            
+            # ★ 即時反映ロジック
             is_dnf = row['DNF']
-            is_finished
+            is_finished = row['Finish_Check']
+            f_time_str = str(row['Finish_Check_Time'])
+            
+            if f"dnf_{t_no}" in st.session_state.local_updates:
+                is_dnf = st.session_state.local_updates[f"dnf_{t_no}"]
+            if f"finish_{t_no}" in st.session_state.local_updates:
+                is_finished = st.session_state.local_updates[f"finish_{t_no}"]
+            if f"time_{t_no}" in st.session_state.local_updates:
+                f_time_str = st.session_state.local_updates[f"time_{t_no}"]
+
+            if is_admin and (not is_finished):
+                col1, col2, col3, col4 = st.columns([1, 1.8, 1.8, 2.8])
+            else:
+                col1, col2, col4 = st.columns([1, 2.2, 3.2])
+                col3 = None
+            
+            col1.markdown(f"**No.{t_no:03d}**")
+            
+            if is_dnf:
+                if is_admin:
+                    if col2.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            latest_df.loc[latest_df['No'] == t_no, 'DNF'] = False
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
+                            if safe_update_data(latest_df):
+                                st.session_state.local_updates[f"dnf_{t_no}"] = False
+                                st.session_state.local_updates[f"finish_{t_no}"] = False
+                                st.session_state.local_updates[f"time_{t_no}"] = ""
+                                load_data.clear()
+                                st.rerun()
+                        except Exception:
+                            st.error("通信エラー")
+                else:
+                    col2.button("棄権済", key=f"dnf_done_{t_no}", disabled=True)
+                
+                col4.error("DNF")
+                
+            elif is_finished:
+                if is_admin:
+                    if col2.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = False
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
+                            if safe_update_data(latest_df):
+                                st.session_state.local_updates[f"finish_{t_no}"] = False
+                                st.session_state.local_updates[f"time_{t_no}"] = ""
+                                load_data.clear()
+                                st.rerun()
+                        except Exception:
+                            st.error("通信エラー")
+                else:
+                    col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
+                
+                if start_time_val and f_time_str and f_time_str != "nan":
+                    try:
+                        f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
+                        f_datetime = datetime.datetime.combine(datetime.date.today(), f_time_obj, tzinfo=JST)
+                        net_time = f_datetime - start_time_val
+                        time_display = f"{f_time_str} ({str(net_time).split('.')[0]})"
+                    except Exception:
+                        time_display = f"{f_time_str}"
+                else:
+                    time_display = f"{f_time_str}"
+                    
+                col4.success(time_display)
+
+            else:
+                if col2.button("🏁 ゴール", key=f"finish_btn_{t_no}", type="primary"):
+                    try:
+                        load_data.clear()
+                        latest_df = load_data()
+                        match_row = latest_df[latest_df['No'] == t_no]
+                        if not match_row.empty and not match_row['Finish_Check'].values[0]:
+                            now_jst = datetime.datetime.now(JST)
+                            now_str = now_jst.strftime('%H:%M:%S')
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
+                            latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = now_str
+                            if safe_update_data(latest_df):
+                                st.session_state.local_updates[f"finish_{t_no}"] = True
+                                st.session_state.local_updates[f"time_{t_no}"] = now_str
+                                load_data.clear()
+                                st.rerun()
+                        else:
+                            load_data.clear()
+                            st.rerun()
+                    except Exception:
+                        st.error("通信エラー")
+                
+                if is_admin and col3 is not None:
+                    if col3.button("⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            match_row = latest_df[latest_df['No'] == t_no]
+                            if not match_row.empty and not match_row['DNF'].values[0]:
+                                latest_df.loc[latest_df['No'] == t_no, 'DNF'] = True
+                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
+                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
+                                if safe_update_data(latest_df):
+                                    st.session_state.local_updates[f"dnf_{t_no}"] = True
+                                    st.session_state.local_updates[f"finish_{t_no}"] = True
+                                    st.session_state.local_updates[f"time_{t_no}"] = ""
+                                    load_data.clear()
+                                    st.rerun()
+                            else:
+                                load_data.clear()
+                                st.rerun()
+                        except Exception:
+                            st.error("通信エラー")
