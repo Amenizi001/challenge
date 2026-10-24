@@ -12,12 +12,17 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
-    /* ボタンの文字を大きくする設定 */
+    /* ボタンの余白と高さを調整 */
     div.stButton > button {
-        font-size: 35px !important; 
-        font-weight: bold !important; 
         padding: 15px 20px !important; 
         height: auto !important; 
+    }
+    
+    /* ボタン内部の文字サイズを強制的に大きくする */
+    div.stButton > button p {
+        font-size: 24px !important; /* ←ここで文字サイズを指定（24pxなど） */
+        font-weight: bold !important; 
+        margin: 0 !important;
     }
     
     /* レイアウト調整用設定 */
