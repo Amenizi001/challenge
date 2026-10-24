@@ -388,16 +388,37 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
-                
-                if start_time_val and f_time_str and f_time_str != "nan":
+                if f_time_str and f_time_str != "nan":
                     try:
-                        f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
-                        f_datetime = datetime.datetime.combine(datetime.date.today(), f_time_obj, tzinfo=JST)
-                        net_time = f_datetime - start_time_val
-                        time_display = f"{f_time_str} ({str(net_time).split('.')[0]})"
-                    except Exception: time_display = f"{f_time_str}"
-                else: time_display = f"{f_time_str}"
+                        # 通過時刻を「〇〇時〇〇分〇〇秒」に変換
+                        f_parts = [int(p) for p in f_time_str.split(':')]
+                        time_jp = f"{f_parts[0]}時{f_parts[1]}分{f_parts[2]}秒"
+
+                        if start_time_val:
+                            f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
+                            f_datetime = datetime.datetime.combine(start_time_val.date(), f_time_obj, tzinfo=JST)
+                            net_seconds = int((f_datetime - start_time_val).total_seconds())
+
+                            # ネットタイムを「〇時間〇分〇秒」に変換
+                            h = net_seconds // 3600
+                            m = (net_seconds % 3600) // 60
+                            s = net_seconds % 60
+
+                            if h > 0:
+                                net_jp = f"{h}時間{m}分{s}秒"
+                            else:
+                                net_jp = f"{m}分{s}秒"
+
+                            time_display = f"タイム: {net_jp}\n(着 {time_jp})"
+                        else:
+                            time_display = f"着 {time_jp}"
+                    except Exception:
+                        time_display = f_time_str
+                else:
+                    time_display = ""
+                    
                 col4.success(time_display)
+
 
             else:
                 if col2.button("🏁 ゴール", key=f"finish_btn_{t_no}", type="primary"):
