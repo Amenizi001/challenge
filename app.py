@@ -21,7 +21,7 @@ st.markdown("""
         height: auto !important; 
     }
     div.stButton[style*="width"] > button p {
-        font-size: 24px !important; 
+        font-size: 35px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
     }
