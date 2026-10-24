@@ -277,7 +277,7 @@ with tab1:
                 col2.button("✅ 済", key=f"start_{t_no}", disabled=True)
                 
         else:
-            if col2.button("チェック", key=f"start_{t_no}", type="primary"):
+            if col2.button("未チェック", key=f"start_{t_no}", type="primary"):
                 try:
                     load_data.clear()
                     latest_df = load_data()
