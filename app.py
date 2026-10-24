@@ -13,14 +13,14 @@ JST = ZoneInfo("Asia/Tokyo")
 st.markdown("""
 <style>
     /* ---------------------------------------------------
-       ★ メインアクション（未・ゴール）のボタンだけを大きくする
-       (type="primary" に指定されているボタンのみ適用)
+       ★ メインの操作ボタン（未・済・取消など）のみ大きくする
+       （use_container_width=True が設定されたボタンを狙い撃ち）
     ---------------------------------------------------- */
-    div.stButton > button[kind="primary"] {
+    div.stButton[style*="width"] > button {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    div.stButton > button[kind="primary"] p {
+    div.stButton[style*="width"] > button p {
         font-size: 24px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
@@ -209,6 +209,7 @@ with tab1:
     t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
+    # 💡更新ボタンは通常サイズ（use_container_width=True をつけない）
     if t_col2.button("🔄 更新", key="upd_start"):
         st.session_state.local_updates.clear()
         if time.time() - global_sync["last_read_time"] >= 5.0:
@@ -259,7 +260,8 @@ with tab1:
             for idx, (_, row) in enumerate(batch.iterrows()):
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary"):
+                # 💡一覧のボタンには use_container_width=True をつける（CSSで大きくなる）
+                if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
                     try:
                         update_start_cell(t_no, True)
                         st.session_state.local_updates[f"start_{t_no}"] = True
@@ -277,7 +279,7 @@ with tab1:
             for idx, (_, row) in enumerate(batch.iterrows()):
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                if cols[idx].button(f"🚫 {no_str}:棄権", key=f"dns_btn_{t_no}", type="secondary"):
+                if cols[idx].button(f"🚫 {no_str}:棄権", key=f"dns_btn_{t_no}", type="secondary", use_container_width=True):
                     try:
                         update_dns_cells(t_no, True)
                         st.session_state.local_updates[f"dns_{t_no}"] = True
@@ -305,7 +307,7 @@ with tab1:
 
                 if is_dns:
                     if is_admin:
-                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_dns_cells(t_no, False)
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
@@ -313,17 +315,17 @@ with tab1:
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
                     else:
-                        cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True)
+                        cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True, use_container_width=True)
                 elif is_start:
                     if is_admin:
-                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
                     else:
-                        cols[idx].button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True)
+                        cols[idx].button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -391,7 +393,7 @@ with tab2:
                 for idx, (_, row) in enumerate(batch.iterrows()):
                     t_no = int(row['No'])
                     no_str = f"{t_no:03d}"
-                    if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary"):
+                    if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary", use_container_width=True):
                         try:
                             now_str = datetime.datetime.now(JST).strftime('%H:%M:%S')
                             update_finish_cells(t_no, True, now_str)
@@ -435,7 +437,7 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
-                    if col_btn.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                    if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary", use_container_width=True):
                         try:
                             update_finish_cells(t_no, False, "")
                             st.session_state.local_updates[f"finish_{t_no}"] = False
@@ -457,7 +459,7 @@ with tab2:
                 for idx, (_, row) in enumerate(batch.iterrows()):
                     t_no = int(row['No'])
                     no_str = f"{t_no:03d}"
-                    if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_btn_{t_no}", type="secondary"):
+                    if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_btn_{t_no}", type="secondary", use_container_width=True):
                         try:
                             update_dnf_cells(t_no, True, True, "")
                             st.session_state.local_updates[f"dnf_{t_no}"] = True
@@ -478,7 +480,7 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
-                    if col_btn.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                    if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary", use_container_width=True):
                         try:
                             update_dnf_cells(t_no, False, False, "")
                             st.session_state.local_updates[f"dnf_{t_no}"] = False
@@ -555,6 +557,6 @@ with tab3:
 
         st.markdown("---")
         if start_time_val:
-            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+            st.info(f"スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
         else:
-            st.info("設定済:\n未設定")
+            st.info("スタート時刻:\n未設定")
