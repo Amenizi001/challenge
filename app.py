@@ -109,8 +109,8 @@ def load_data():
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
     df['DNF'] = df['DNF'].fillna(False).astype(bool)
     df['DNS'] = df['DNS'].fillna(False).astype(bool)
-    df['Key'] = df['Key'].fillna("").astype(str)
-    df['Value'] = df['Value'].fillna("").astype(str)
+    df['Key'] = df['Key'].fillna("").astype(str).str.strip()
+    df['Value'] = df['Value'].fillna("").astype(str).str.strip()
     
     global_sync["last_read_time"] = time.time()
     return df
@@ -185,7 +185,7 @@ except Exception:
         st.stop()
 
 settings_dict = dict(zip(df['Key'], df['Value']))
-finish_enabled = str(settings_dict.get('finish_enabled', 'False')).lower() == 'true'
+finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
 start_time_str = str(settings_dict.get('start_time', ''))
 if start_time_str and start_time_str.lower() != 'nan':
