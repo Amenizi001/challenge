@@ -3,8 +3,7 @@ import pandas as pd
 import datetime
 import time
 from zoneinfo import ZoneInfo
-from streamlit_gsheets import GSheetsConnection
-import gspread  # ★直接通信のために追加
+import gspread
 
 st.set_page_config(page_title="マラソン大会 チェックシステム", layout="centered")
 
@@ -36,8 +35,6 @@ def check_password():
 
 if not check_password(): st.stop()
 
-conn = st.connection("gsheets", type=GSheetsConnection)
-
 if "local_updates" not in st.session_state: st.session_state.local_updates = {}
 if "last_valid_df" not in st.session_state: st.session_state.last_valid_df = None
 
@@ -45,20 +42,15 @@ if "last_valid_df" not in st.session_state: st.session_state.last_valid_df = Non
 def get_global_sync_manager(): return {"last_read_time": 0.0}
 global_sync = get_global_sync_manager()
 
-
 # ==========================================
-# ★ 直接通信によるピンポイント更新機能（エラー解消版）
+# ★ 直接通信による超高速・高安定の連携機能
 # ==========================================
 @st.cache_resource
 def get_gspread_client():
-    """Streamlitの制限を回避し、gspreadで直接スプレッドシートに接続する"""
     creds_dict = dict(st.secrets.connections.gsheets)
-    # 認証用の辞書からURLを取り出す
     url = creds_dict.pop("spreadsheet", None)
     if url is None:
         url = st.secrets.connections.gsheets.spreadsheet
-        
-    # gspreadで直接認証（超高速・高安定）
     client = gspread.service_account_from_dict(creds_dict)
     return client, url
 
@@ -79,7 +71,6 @@ def update_dns_cells(no: int, dns: bool):
 
 def update_finish_cells(no: int, checked: bool, time_str: str):
     ws = get_worksheet()
-    # ライブラリのバージョン違いによるエラーを防ぐため range_name, values を明記
     ws.update(range_name=f"C{no + 1}:D{no + 1}", values=[[checked, time_str]])
     return True
 
@@ -104,14 +95,19 @@ def update_setting_cell(key: str, value: str):
         ws.update_cell(next_row, val_col_idx, str(value))
     return True
 
-
 # ==========================================
-# データ読み込み処理
+# ★ 読み込みもAPI直接通信に変更（CSVキャッシュ回避）
 # ==========================================
 @st.cache_data(ttl=15)
 def load_data():
-    df = conn.read(worksheet="Data", ttl=0)
-    if df is None or len(df) == 0: raise ValueError("データが取得できませんでした")
+    ws = get_worksheet()
+    data = ws.get_all_values() # APIからリアルタイムにセル情報を全取得
+    
+    if not data or len(data) < 2:
+        raise ValueError("データが取得できませんでした")
+        
+    headers = data[0]
+    df = pd.DataFrame(data[1:], columns=headers)
         
     expected_cols = ['No', 'Start_Check', 'Finish_Check', 'Finish_Check_Time', 'DNF', 'DNS', 'Key', 'Value']
     current_cols = list(df.columns)
@@ -119,13 +115,19 @@ def load_data():
         st.error("⚠️ スプレッドシートの列構成が正しくありません。")
         st.stop()
         
-    if 'No' in df.columns: df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
-    df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
-    df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
-    df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
-    df['DNF'] = df['DNF'].fillna(False).astype(bool)
-    df['DNS'] = df['DNS'].fillna(False).astype(bool)
+    # 文字列として取得したデータを変換
+    if 'No' in df.columns: 
+        df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
+        
+    def str_to_bool(val):
+        return str(val).strip().upper() == 'TRUE'
+        
+    df['Start_Check'] = df['Start_Check'].apply(str_to_bool)
+    df['Finish_Check'] = df['Finish_Check'].apply(str_to_bool)
+    df['DNF'] = df['DNF'].apply(str_to_bool)
+    df['DNS'] = df['DNS'].apply(str_to_bool)
     
+    df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
     df['Key'] = df['Key'].fillna("").astype(str).str.strip()
     df['Value'] = df['Value'].fillna("").astype(str).str.strip()
     
