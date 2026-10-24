@@ -221,11 +221,6 @@ if admin_pass == st.secrets["admin_password"]:
         st.sidebar.warning("スタート時刻：未設定")
 
 # --- メイン画面 ---
-st.title("マラソン大会 チェックシステム")
-
-if st.button("🔄 最新データに更新", use_container_width=True):
-    load_data.clear()
-    st.rerun()
 
 tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
@@ -233,12 +228,17 @@ tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 # タブ1：スタートチェック
 # ==========================================
 with tab1:
-    st.subheader("スタートライン チェック")
-    filter_start = st.radio("表示フィルター (スタート)", ["すべて", "未チェック", "チェック済み"], horizontal=True)
+    h_col1, h_col2 = st.columns([2.5, 1])
+    h_col1.markdown("#### 🚩 スタート")
+    if h_col2.button("🔄 更新", key="upd_start"):
+        load_data.clear()
+        st.rerun()
+        
+    filter_start = st.radio("フィルター(スタート)", ["すべて", "未チェック", "チェック済"], horizontal=True, label_visibility="collapsed", key="f_start")
     
     if filter_start == "未チェック":
         view_df = df[~df['Start_Check']]
-    elif filter_start == "チェック済み":
+    elif filter_start == "チェック済":
         view_df = df[df['Start_Check']]
     else:
         view_df = df
@@ -249,27 +249,25 @@ with tab1:
         for i in range(1, max_no + 1, 10):
             range_options.append(f"{i}～{i+9}")
             
-        selected_range_start = st.selectbox("🔍 チーム番号帯で表示", range_options, key="range_start")
+        selected_range_start = st.radio("番号帯(スタート)", range_options, horizontal=True, label_visibility="collapsed", key="r_start")
         
         if selected_range_start != "すべて":
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
-        
-    st.caption(f"表示件数: {len(view_df)} 件")
+
+    # 表示件数の記述を削除しました
     
     for _, row in view_df.iterrows():
         t_no = int(row['No'])
         col1, col2 = st.columns([1, 2.5])
         col1.markdown(f"**No.{t_no:03d}**")
         
-        # チェック済みの場合
         if row['Start_Check']:
             if is_admin:
                 if col2.button("❌ 取消", key=f"start_{t_no}", type="secondary"):
                     try:
                         load_data.clear()
                         latest_df = load_data()
-                        # Noをキーにして確実に特定行を更新
                         latest_df.loc[latest_df['No'] == t_no, 'Start_Check'] = False
                         if safe_update_data(latest_df):
                             st.rerun()
@@ -278,7 +276,6 @@ with tab1:
             else:
                 col2.button("✅ 済", key=f"start_{t_no}", disabled=True)
                 
-        # 未チェックの場合
         else:
             if col2.button("チェック", key=f"start_{t_no}", type="primary"):
                 try:
@@ -299,34 +296,39 @@ with tab1:
 # タブ2：ゴールチェック
 # ==========================================
 with tab2:
-    st.subheader("ゴール チェック")
+    h_col3, h_col4 = st.columns([2.5, 1])
+    h_col3.markdown("#### 🏁 ゴール")
+    if h_col4.button("🔄 更新", key="upd_finish"):
+        load_data.clear()
+        st.rerun()
     
     if not finish_enabled:
-        st.warning("現在、ゴールチェック機能はロックされています。（管理者が開放するまでお待ちください）")
+        st.warning("現在、ゴールチェック機能はロックされています。")
     else:
         started_df = df[df['Start_Check']]
-        filter_finish = st.radio("表示フィルター (ゴール)", ["すべて", "未ゴール", "ゴール済み (DNF含む)"], horizontal=True)
+        
+        filter_finish = st.radio("フィルター(ゴール)", ["すべて", "未ゴール", "ゴール済 (DNF含)"], horizontal=True, label_visibility="collapsed", key="f_finish")
         
         if filter_finish == "未ゴール":
             view_df2 = started_df[~started_df['Finish_Check']]
-        elif filter_finish == "ゴール済み (DNF含む)":
+        elif filter_finish == "ゴール済 (DNF含)":
             view_df2 = started_df[started_df['Finish_Check']]
         else:
             view_df2 = started_df
-
+            
         if not df.empty:
             max_no2 = int(df['No'].max())
             range_options2 = ["すべて"]
             for i in range(1, max_no2 + 1, 10):
                 range_options2.append(f"{i}～{i+9}")
                 
-            selected_range_finish = st.selectbox("🔍 チーム番号帯で表示", range_options2, key="range_finish")
+            selected_range_finish = st.radio("番号帯(ゴール)", range_options2, horizontal=True, label_visibility="collapsed", key="r_finish")
             
             if selected_range_finish != "すべて":
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
-                
-        st.caption(f"表示件数: {len(view_df2)} 件")
+            
+        # 表示件数の記述を削除しました
         
         for _, row in view_df2.iterrows():
             t_no = int(row['No'])
@@ -341,7 +343,6 @@ with tab2:
             
             col1.markdown(f"**No.{t_no:03d}**")
             
-            # --- 途中棄権(DNF)済みの行 ---
             if is_dnf:
                 if is_admin:
                     if col2.button("↩️ 取消", key=f"undnf_{t_no}", type="secondary"):
@@ -360,7 +361,6 @@ with tab2:
                 
                 col4.error("DNF")
                 
-            # --- 通常のゴール済みの行 ---
             elif is_finished:
                 if is_admin:
                     if col2.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
@@ -390,9 +390,7 @@ with tab2:
                     
                 col4.success(time_display)
 
-            # --- 未ゴール（チェック可能）の行 ---
             else:
-                # 1. ゴールボタン
                 if col2.button("🏁 ゴール", key=f"finish_btn_{t_no}", type="primary"):
                     try:
                         load_data.clear()
@@ -408,3 +406,20 @@ with tab2:
                             st.rerun()
                     except Exception:
                         st.error("通信エラー")
+                
+                if is_admin and col3 is not None:
+                    if col3.button("⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            match_row = latest_df[latest_df['No'] == t_no]
+                            if not match_row.empty and not match_row['DNF'].values[0]:
+                                latest_df.loc[latest_df['No'] == t_no, 'DNF'] = True
+                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check'] = True
+                                latest_df.loc[latest_df['No'] == t_no, 'Finish_Check_Time'] = ""
+                                if safe_update_data(latest_df):
+                                    st.rerun()
+                            else:
+                                st.rerun()
+                        except Exception:
+                            st.error("通信エラー")
