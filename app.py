@@ -42,9 +42,6 @@ if "last_valid_df" not in st.session_state: st.session_state.last_valid_df = Non
 def get_global_sync_manager(): return {"last_read_time": 0.0}
 global_sync = get_global_sync_manager()
 
-# ==========================================
-# ★ 直接通信による超高速・高安定の連携機能
-# ==========================================
 @st.cache_resource
 def get_gspread_client():
     creds_dict = dict(st.secrets.connections.gsheets)
@@ -95,13 +92,10 @@ def update_setting_cell(key: str, value: str):
         ws.update_cell(next_row, val_col_idx, str(value))
     return True
 
-# ==========================================
-# ★ 読み込みもAPI直接通信に変更（CSVキャッシュ回避）
-# ==========================================
 @st.cache_data(ttl=15)
 def load_data():
     ws = get_worksheet()
-    data = ws.get_all_values() # APIからリアルタイムにセル情報を全取得
+    data = ws.get_all_values() 
     
     if not data or len(data) < 2:
         raise ValueError("データが取得できませんでした")
@@ -115,7 +109,6 @@ def load_data():
         st.error("⚠️ スプレッドシートの列構成が正しくありません。")
         st.stop()
         
-    # 文字列として取得したデータを変換
     if 'No' in df.columns: 
         df['No'] = pd.to_numeric(df['No'], errors='coerce').fillna(0).astype(int)
         
@@ -147,6 +140,7 @@ except Exception:
         st.error("⚠️ 読込エラー。約1分待って再読み込みしてください。")
         st.stop()
 
+# 空白のKeyを除外して辞書化
 settings_dict = {k: v for k, v in zip(df['Key'], df['Value']) if k != ""}
 finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
@@ -158,10 +152,6 @@ else:
 
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
-
-# ==========================================
-# サイドバー：管理者メニュー
-# ==========================================
 st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
@@ -205,9 +195,6 @@ if admin_pass == st.secrets["admin_password"]:
     st.sidebar.write(settings_dict)
 
 
-# ==========================================
-# メイン画面（タブ）
-# ==========================================
 tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 with tab1:
@@ -249,7 +236,8 @@ with tab1:
         if f"start_{t_no}" in st.session_state.local_updates: is_start = st.session_state.local_updates[f"start_{t_no}"]
         if f"dns_{t_no}" in st.session_state.local_updates: is_dns = st.session_state.local_updates[f"dns_{t_no}"]
         
-        if is_admin and (not is_start) and (not is_dns): col1, col2, col3 = st.columns([1, 1.8, 1.8])
+        if is_admin:
+            col1, col2, col3 = st.columns([1, 1.5, 3.0])
         else:
             col1, col2 = st.columns([1, 2.5])
             col3 = None
@@ -257,27 +245,25 @@ with tab1:
         col1.markdown(f"**No.{t_no:03d}**")
         
         if is_dns:
+            col2.button("🚫 DNS", key=f"dns_done_{t_no}", disabled=True)
             if is_admin:
-                if col2.button("↩️ 取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                if col3.button("↩️ 棄権取消", key=f"dns_cancel_{t_no}", type="secondary"):
                     try:
                         update_dns_cells(t_no, False)
                         st.session_state.local_updates[f"dns_{t_no}"] = False
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
-            else:
-                col2.button("🚫 DNS", key=f"dns_done_{t_no}", disabled=True)
                 
         elif is_start:
+            col2.button("✅ 済", key=f"start_done_{t_no}", disabled=True)
             if is_admin:
-                if col2.button("❌ スタートチェック取消", key=f"start_cancel_{t_no}", type="secondary"):
+                if col3.button("❌ スタートチェック取消", key=f"start_cancel_{t_no}", type="secondary"):
                     try:
                         update_start_cell(t_no, False)
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
-            else:
-                col2.button("✅ 済", key=f"start_done_{t_no}", disabled=True)
                 
         else:
             if col2.button("チェック", key=f"start_btn_{t_no}", type="primary"):
@@ -342,16 +328,18 @@ with tab2:
             if f"finish_{t_no}" in st.session_state.local_updates: is_finished = st.session_state.local_updates[f"finish_{t_no}"]
             if f"time_{t_no}" in st.session_state.local_updates: f_time_str = st.session_state.local_updates[f"time_{t_no}"]
 
-            if is_admin and (not is_finished): col1, col2, col3, col4 = st.columns([1, 1.8, 1.8, 2.8])
+            if is_admin:
+                col1, col2, col3, col4 = st.columns([1, 1.5, 2.5, 2.5])
             else:
-                col1, col2, col4 = st.columns([1, 2.2, 3.2])
+                col1, col2, col4 = st.columns([1, 2.0, 3.0])
                 col3 = None
             
             col1.markdown(f"**No.{t_no:03d}**")
             
             if is_dnf:
+                col2.button("棄権済", key=f"dnf_done_{t_no}", disabled=True)
                 if is_admin:
-                    if col2.button("↩️ 棄権取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                    if col3.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
                             st.session_state.local_updates[f"dnf_{t_no}"] = False
@@ -359,19 +347,18 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
-                else: col2.button("棄権済", key=f"dnf_done_{t_no}", disabled=True)
                 col4.error("DNF")
                 
             elif is_finished:
+                col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
                 if is_admin:
-                    if col2.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                    if col3.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
                             update_finish_cells(t_no, False, "")
                             st.session_state.local_updates[f"finish_{t_no}"] = False
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
-                else: col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
                 
                 if start_time_val and f_time_str and f_time_str != "nan":
                     try:
