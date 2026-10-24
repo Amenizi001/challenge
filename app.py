@@ -35,30 +35,42 @@ if not check_password():
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # ==========================================
-# データ読み込み関数（キャッシュを分離してAPI通信を極限まで減らす）
+# データ読み込み関数（1シート化で通信量を極小化）
 # ==========================================
-@st.cache_data(ttl=60)
-def load_settings():
-    """設定シートは滅多に変わらないため、60秒間キャッシュする"""
-    df = conn.read(worksheet="Settings", ttl=0)
-    df['Value'] = df['Value'].fillna("").astype(str)
-    return df
-
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=15)
 def load_data():
-    """データシートは10秒間キャッシュする"""
+    """参加者データと設定値(F列/G列)を同時に読み込む"""
     df = conn.read(worksheet="Data", ttl=0)
+    
+    # 参加者データ側の型整形
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
     df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
     df['Finish_Check_Time'] = df['Finish_Check_Time'].fillna("").astype(str)
+    
+    # DNF列の型整形（存在しない場合は自動生成）
+    if 'DNF' not in df.columns:
+        df['DNF'] = False
+    else:
+        df['DNF'] = df['DNF'].fillna(False).astype(bool)
+    
+    # 設定値側(F/G列)の型整形
+    if 'Key' not in df.columns:
+        df['Key'] = ""
+    if 'Value' not in df.columns:
+        df['Value'] = ""
+        
+    df['Key'] = df['Key'].fillna("").astype(str)
+    df['Value'] = df['Value'].fillna("").astype(str)
+    
     return df
 
 
-# --- データの読み込み実行 ---
+# --- データの読み込みと設定値の抽出 ---
 try:
-    settings_df = load_settings()
-    settings_dict = dict(zip(settings_df['Key'], settings_df['Value']))
+    df = load_data()
     
+    # F列(Key)とG列(Value)から設定辞書を作成
+    settings_dict = dict(zip(df['Key'], df['Value']))
     finish_enabled = str(settings_dict.get('finish_enabled', 'False')).lower() == 'true'
     
     start_time_str = str(settings_dict.get('start_time', ''))
@@ -67,7 +79,6 @@ try:
     else:
         start_time_val = None
         
-    df = load_data()
 except Exception as e:
     if "429" in str(e) or "RATE_LIMIT_EXCEEDED" in str(e):
         st.error("⚠️ アクセスが集中しています（API通信制限）。")
@@ -93,13 +104,12 @@ if admin_pass == st.secrets["admin_password"]:
         value=finish_enabled
     )
     
-    # フラグが変更されたらSettingsシートを更新
     if new_finish_enabled != finish_enabled:
         try:
-            load_settings.clear() # 設定のキャッシュのみクリア
-            latest_settings = load_settings()
-            latest_settings.loc[latest_settings['Key'] == 'finish_enabled', 'Value'] = str(new_finish_enabled)
-            conn.update(worksheet="Settings", data=latest_settings)
+            load_data.clear()
+            latest_df = load_data()
+            latest_df.loc[latest_df['Key'] == 'finish_enabled', 'Value'] = str(new_finish_enabled)
+            conn.update(worksheet="Data", data=latest_df)
             st.rerun()
         except Exception:
             st.sidebar.error("通信が混み合っています。少し待ってから再度お試しください。")
@@ -108,11 +118,11 @@ if admin_pass == st.secrets["admin_password"]:
     
     if st.sidebar.button("現在時刻(JST)をスタートに設定"):
         try:
-            load_settings.clear()
-            latest_settings = load_settings()
+            load_data.clear()
+            latest_df = load_data()
             new_time = datetime.datetime.now(JST)
-            latest_settings.loc[latest_settings['Key'] == 'start_time', 'Value'] = new_time.strftime('%Y-%m-%d %H:%M:%S')
-            conn.update(worksheet="Settings", data=latest_settings)
+            latest_df.loc[latest_df['Key'] == 'start_time', 'Value'] = new_time.strftime('%Y-%m-%d %H:%M:%S')
+            conn.update(worksheet="Data", data=latest_df)
             st.rerun()
         except Exception:
             st.sidebar.error("エラー: 数秒待ってから再度お試しください。")
@@ -125,12 +135,12 @@ if admin_pass == st.secrets["admin_password"]:
     
     if st.sidebar.button("手動入力した時刻をセット"):
         try:
-            load_settings.clear()
-            latest_settings = load_settings()
+            load_data.clear()
+            latest_df = load_data()
             today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
             new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-            latest_settings.loc[latest_settings['Key'] == 'start_time', 'Value'] = new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')
-            conn.update(worksheet="Settings", data=latest_settings)
+            latest_df.loc[latest_df['Key'] == 'start_time', 'Value'] = new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')
+            conn.update(worksheet="Data", data=latest_df)
             st.rerun()
         except Exception:
             st.sidebar.error("エラー: 数秒待ってから再度お試しください。")
@@ -172,7 +182,7 @@ with tab1:
             if is_admin:
                 if col2.button("❌ 取消", key=f"start_{row['No']}", type="secondary"):
                     try:
-                        load_data.clear() # データシートのキャッシュのみクリア
+                        load_data.clear()
                         latest_df = load_data()
                         latest_df.at[index, 'Start_Check'] = False
                         conn.update(worksheet="Data", data=latest_df)
@@ -186,10 +196,11 @@ with tab1:
         else:
             if col2.button("✅ チェック", key=f"start_{row['No']}", type="primary"):
                 try:
-                    load_data.clear() # データシートのキャッシュのみクリア
+                    load_data.clear()
                     latest_df = load_data()
-                    latest_df.at[index, 'Start_Check'] = True
-                    conn.update(worksheet="Data", data=latest_df)
+                    if not latest_df.at[index, 'Start_Check']:
+                        latest_df.at[index, 'Start_Check'] = True
+                        conn.update(worksheet="Data", data=latest_df)
                     st.rerun()
                 except Exception:
                     st.error("通信エラー：アクセス集中。数秒待ってからもう一度押してください。")
@@ -205,11 +216,11 @@ with tab2:
         st.warning("現在、ゴールチェック機能はロックされています。（管理者が開放するまでお待ちください）")
     else:
         started_df = df[df['Start_Check']]
-        filter_finish = st.radio("表示フィルター (ゴール)", ["すべて", "未ゴール", "ゴール済み"], horizontal=True)
+        filter_finish = st.radio("表示フィルター (ゴール)", ["すべて", "未ゴール", "ゴール済み (DNF含む)"], horizontal=True)
         
         if filter_finish == "未ゴール":
             view_df2 = started_df[~started_df['Finish_Check']]
-        elif filter_finish == "ゴール済み":
+        elif filter_finish == "ゴール済み (DNF含む)":
             view_df2 = started_df[started_df['Finish_Check']]
         else:
             view_df2 = started_df
@@ -217,13 +228,35 @@ with tab2:
         st.write(f"表示件数: {len(view_df2)} 件")
         
         for index, row in view_df2.iterrows():
-            col1, col2, col3 = st.columns([1, 2, 3])
+            col1, col2, col3, col4 = st.columns([1, 2, 2, 3])
             col1.markdown(f"**No: {row['No']}**")
             
-            # ゴール済みの場合
-            if row['Finish_Check']:
+            is_dnf = row['DNF']
+            is_finished = row['Finish_Check']
+            
+            # --- 途中棄権(DNF)済みの行 ---
+            if is_dnf:
                 if is_admin:
-                    if col2.button("❌ 取消", key=f"finish_{row['No']}", type="secondary"):
+                    if col2.button("↩️ 棄権取消", key=f"undnf_{row['No']}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            latest_df.at[index, 'DNF'] = False
+                            latest_df.at[index, 'Finish_Check'] = False
+                            latest_df.at[index, 'Finish_Check_Time'] = ""
+                            conn.update(worksheet="Data", data=latest_df)
+                            st.rerun()
+                        except Exception:
+                            st.error("通信エラー：アクセス集中。")
+                else:
+                    col2.button("🚫 棄権済", key=f"dnf_dis_{row['No']}", disabled=True)
+                
+                col4.error("⚠️ DNF (途中棄権)")
+                
+            # --- 通常のゴール済みの行 ---
+            elif is_finished:
+                if is_admin:
+                    if col2.button("❌ ゴール取消", key=f"finish_cancel_{row['No']}", type="secondary"):
                         try:
                             load_data.clear()
                             latest_df = load_data()
@@ -232,28 +265,12 @@ with tab2:
                             conn.update(worksheet="Data", data=latest_df)
                             st.rerun()
                         except Exception:
-                            st.error("通信エラー：アクセス集中。数秒待ってからもう一度押してください。")
+                            st.error("通信エラー：アクセス集中。")
                 else:
-                    col2.button("🏁 ゴール済", key=f"finish_{row['No']}", disabled=True)
-                    
-            # 未ゴールの場合
-            else:
-                if col2.button("🏁 ゴール！", key=f"finish_{row['No']}", type="primary"):
-                    try:
-                        load_data.clear()
-                        latest_df = load_data()
-                        latest_df.at[index, 'Finish_Check'] = True
-                        now_jst = datetime.datetime.now(JST)
-                        latest_df.at[index, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
-                        conn.update(worksheet="Data", data=latest_df)
-                        st.rerun()
-                    except Exception:
-                        st.error("通信エラー：アクセス集中。数秒待ってからもう一度押してください。")
+                    col2.button("🏁 ゴール済", key=f"finish_done_{row['No']}", disabled=True)
                 
-            # ゴール時間とタイムの表示処理
-            if row['Finish_Check']:
+                # ゴール時刻とタイムの表示
                 f_time_str = str(row['Finish_Check_Time'])
-                
                 if start_time_val and f_time_str and f_time_str != "nan":
                     try:
                         f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
@@ -265,4 +282,36 @@ with tab2:
                 else:
                     time_display = f"ゴール: {f_time_str} (スタート未設定)"
                     
-                col3.success(time_display)
+                col4.success(time_display)
+
+            # --- 未ゴール（チェック可能）の行 ---
+            else:
+                # 1. ゴールボタン
+                if col2.button("🏁 ゴール！", key=f"finish_btn_{row['No']}", type="primary"):
+                    try:
+                        load_data.clear()
+                        latest_df = load_data()
+                        # 最新データで未ゴールの場合のみ記録
+                        if not latest_df.at[index, 'Finish_Check']:
+                            latest_df.at[index, 'Finish_Check'] = True
+                            now_jst = datetime.datetime.now(JST)
+                            latest_df.at[index, 'Finish_Check_Time'] = now_jst.strftime('%H:%M:%S')
+                            conn.update(worksheet="Data", data=latest_df)
+                        st.rerun()
+                    except Exception:
+                        st.error("通信エラー：アクセス集中。")
+                
+                # 2. 管理者限定：途中棄権ボタン
+                if is_admin:
+                    if col3.button("⚠️ 途中棄権", key=f"dnf_btn_{row['No']}", type="secondary"):
+                        try:
+                            load_data.clear()
+                            latest_df = load_data()
+                            if not latest_df.at[index, 'DNF']:
+                                latest_df.at[index, 'DNF'] = True
+                                latest_df.at[index, 'Finish_Check'] = True
+                                latest_df.at[index, 'Finish_Check_Time'] = ""
+                                conn.update(worksheet="Data", data=latest_df)
+                            st.rerun()
+                        except Exception:
+                            st.error("通信エラー：アクセス集中。")
