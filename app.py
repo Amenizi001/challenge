@@ -38,13 +38,10 @@ if 'start_time' not in st.session_state:
 # --- スプレッドシート接続とデータ読み込み ---
 # secrets.tomlの [connections.gsheets] に記載されたURLから自動で読み込みます
 conn = st.connection("gsheets", type=GSheetsConnection)
-try:
-    df = conn.read(ttl=0) 
-    df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
-    df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
-except Exception as e:
-    st.error("スプレッドシートの読み込みに失敗しました。設定を確認してください。")
-    st.stop()
+df = conn.read(ttl=0) 
+df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
+df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
+
 
 # --- サイドバー：管理者設定 ---
 st.sidebar.header("管理者メニュー")
