@@ -56,7 +56,7 @@ st.markdown("""
         padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
         align-items: center; width: 100%; box-sizing: border-box;
     }
-    .finish-no { font-weight: bold; color: #212529; font-size: 1.15rem; }
+    .finish-no { font-weight: bold; color: #212529; font-size: 1.8rem; }
     .finish-time { color: #0f5132; font-weight: bold; font-size: 1.05rem; }
     .finish-clock { color: #6c757d; font-size: 0.95rem; }
     .dnf-card {
@@ -245,7 +245,7 @@ with tab1:
 
     uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
-        st.caption("【未チェック】タップしてスタートチェック完了")
+        st.caption("【スタート前_未チェック一覧】")
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(uncheck_df), grid_cols):
@@ -285,7 +285,7 @@ with tab1:
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
-            st.caption("【スタートチェック済・棄権一覧】")
+            st.caption("【スタート前_チェック済・棄権一覧】")
         for _, row in done_df.iterrows():
             t_no = int(row['No'])
             no_str = f"{t_no:03d}"
@@ -392,7 +392,7 @@ with tab2:
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             if filter_finish == "すべて":
                 st.markdown("---")
-            st.caption("【ゴール済みチーム一覧】")
+            st.caption("【ゴール済み一覧】")
             for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
@@ -413,8 +413,11 @@ with tab2:
                             net_jp = f"{h}時間{m}分{s}秒" if h > 0 else f"{m}分{s}秒"
                     except Exception:
                         pass
-                time_info = f"<span class='finish-time'>タイム: {net_jp}</span> <span class='finish-clock'>(着 {time_jp})</span>" if net_jp else f"<span class='finish-clock'>着 {time_jp}</span>"
-                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
+                # 改行（<br>）を入れ、2行が右揃えになるように div タグで囲む
+                time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
+                
+                # 余分な <span> を外し、直接 time_info を入れる
+                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
 
                 if is_admin:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
