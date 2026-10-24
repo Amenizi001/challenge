@@ -12,11 +12,53 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
+    /* ボタンの文字を大きくする設定 */
     div.stButton > button {
         font-size: 20px !important; 
         font-weight: bold !important; 
         padding: 15px 20px !important; 
         height: auto !important; 
+    }
+    
+    /* レイアウト調整用設定 */
+    .title-box div[data-testid="stHorizontalBlock"] {
+        display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
+    }
+    .title-box div[data-testid="column"]:nth-child(1) {
+        width: 70% !important; flex: 1 1 70% !important; min-width: 70% !important;
+    }
+    .title-box div[data-testid="column"]:nth-child(2) {
+        width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
+    }
+    .grid-box div[data-testid="stHorizontalBlock"] {
+        display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important;
+    }
+    .grid-box div[data-testid="column"] {
+        width: calc(33.333% - 4px) !important; flex: 1 1 calc(33.333% - 4px) !important;
+        min-width: calc(33.333% - 4px) !important; max-width: calc(33.333% - 4px) !important;
+    }
+    .admin-card-box div[data-testid="stHorizontalBlock"] {
+        display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important;
+    }
+    .admin-card-box div[data-testid="column"]:nth-child(1) {
+        width: 75% !important; flex: 1 1 75% !important; min-width: 75% !important;
+    }
+    .admin-card-box div[data-testid="column"]:nth-child(2) {
+        width: 25% !important; flex: 1 1 25% !important; min-width: 25% !important;
+    }
+    .finish-card {
+        background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px;
+        padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
+        align-items: center; width: 100%; box-sizing: border-box;
+    }
+    .finish-no { font-weight: bold; color: #212529; font-size: 1.15rem; }
+    .finish-time { color: #0f5132; font-weight: bold; font-size: 1.05rem; }
+    .finish-clock { color: #6c757d; font-size: 0.95rem; }
+    .dnf-card {
+        background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
+        padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
+        align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
+        width: 100%; box-sizing: border-box;
     }
 </style>
 """, unsafe_allow_html=True)
