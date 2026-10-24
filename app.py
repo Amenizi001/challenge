@@ -4,6 +4,7 @@ import datetime
 import time
 from zoneinfo import ZoneInfo
 from streamlit_gsheets import GSheetsConnection
+import gspread  # ★直接通信のために追加
 
 st.set_page_config(page_title="マラソン大会 チェックシステム", layout="centered")
 
@@ -44,6 +45,69 @@ if "last_valid_df" not in st.session_state: st.session_state.last_valid_df = Non
 def get_global_sync_manager(): return {"last_read_time": 0.0}
 global_sync = get_global_sync_manager()
 
+
+# ==========================================
+# ★ 直接通信によるピンポイント更新機能（エラー解消版）
+# ==========================================
+@st.cache_resource
+def get_gspread_client():
+    """Streamlitの制限を回避し、gspreadで直接スプレッドシートに接続する"""
+    creds_dict = dict(st.secrets.connections.gsheets)
+    # 認証用の辞書からURLを取り出す
+    url = creds_dict.pop("spreadsheet", None)
+    if url is None:
+        url = st.secrets.connections.gsheets.spreadsheet
+        
+    # gspreadで直接認証（超高速・高安定）
+    client = gspread.service_account_from_dict(creds_dict)
+    return client, url
+
+def get_worksheet():
+    client, url = get_gspread_client()
+    return client.open_by_url(url).worksheet("Data")
+
+def update_start_cell(no: int, checked: bool):
+    ws = get_worksheet()
+    ws.update_cell(no + 1, 2, checked)
+    return True
+
+def update_dns_cells(no: int, dns: bool):
+    ws = get_worksheet()
+    ws.update_cell(no + 1, 2, False)
+    ws.update_cell(no + 1, 6, dns)
+    return True
+
+def update_finish_cells(no: int, checked: bool, time_str: str):
+    ws = get_worksheet()
+    # ライブラリのバージョン違いによるエラーを防ぐため range_name, values を明記
+    ws.update(range_name=f"C{no + 1}:D{no + 1}", values=[[checked, time_str]])
+    return True
+
+def update_dnf_cells(no: int, dnf: bool, finish_check: bool, time_str: str):
+    ws = get_worksheet()
+    ws.update(range_name=f"C{no + 1}:E{no + 1}", values=[[finish_check, time_str, dnf]])
+    return True
+
+def update_setting_cell(key: str, value: str):
+    ws = get_worksheet()
+    headers = ws.row_values(1)
+    key_col_idx = headers.index('Key') + 1 if 'Key' in headers else 7
+    val_col_idx = key_col_idx + 1
+
+    keys = ws.col_values(key_col_idx)
+    if key in keys:
+        row_idx = keys.index(key) + 1
+        ws.update_cell(row_idx, val_col_idx, str(value))
+    else:
+        next_row = len(keys) + 1
+        ws.update_cell(next_row, key_col_idx, key)
+        ws.update_cell(next_row, val_col_idx, str(value))
+    return True
+
+
+# ==========================================
+# データ読み込み処理
+# ==========================================
 @st.cache_data(ttl=15)
 def load_data():
     df = conn.read(worksheet="Data", ttl=0)
@@ -62,55 +126,12 @@ def load_data():
     df['DNF'] = df['DNF'].fillna(False).astype(bool)
     df['DNS'] = df['DNS'].fillna(False).astype(bool)
     
-    # 見えないスペースを削除して読み込む
     df['Key'] = df['Key'].fillna("").astype(str).str.strip()
     df['Value'] = df['Value'].fillna("").astype(str).str.strip()
     
     global_sync["last_read_time"] = time.time()
     return df
 
-def get_worksheet():
-    client = conn._instance
-    spreadsheet = client.open_by_url(st.secrets.connections.gsheets.spreadsheet)
-    return spreadsheet.worksheet("Data")
-
-def update_start_cell(no: int, checked: bool):
-    ws = get_worksheet()
-    ws.update_cell(no + 1, 2, checked)
-    return True
-
-def update_dns_cells(no: int, dns: bool):
-    ws = get_worksheet()
-    ws.update_cell(no + 1, 2, False)
-    ws.update_cell(no + 1, 6, dns)
-    return True
-
-def update_finish_cells(no: int, checked: bool, time_str: str):
-    ws = get_worksheet()
-    ws.update(f"C{no + 1}:D{no + 1}", [[checked, time_str]])
-    return True
-
-def update_dnf_cells(no: int, dnf: bool, finish_check: bool, time_str: str):
-    ws = get_worksheet()
-    ws.update(f"C{no + 1}:E{no + 1}", [[finish_check, time_str, dnf]])
-    return True
-
-# ★エラーの原因だった検索機能を、絶対にエラーにならない方式に修正
-def update_setting_cell(key: str, value: str):
-    ws = get_worksheet()
-    headers = ws.row_values(1)
-    key_col_idx = headers.index('Key') + 1 if 'Key' in headers else 7
-    val_col_idx = key_col_idx + 1
-
-    keys = ws.col_values(key_col_idx) # Key列を全て取得
-    if key in keys:
-        row_idx = keys.index(key) + 1 # 何行目か特定
-        ws.update_cell(row_idx, val_col_idx, str(value))
-    else:
-        next_row = len(keys) + 1
-        ws.update_cell(next_row, key_col_idx, key)
-        ws.update_cell(next_row, val_col_idx, str(value))
-    return True
 
 api_limit_mode = False
 try:
@@ -135,6 +156,10 @@ else:
 
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
+
+# ==========================================
+# サイドバー：管理者メニュー
+# ==========================================
 st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 is_admin = False
@@ -159,7 +184,6 @@ if admin_pass == st.secrets["admin_password"]:
             time.sleep(2.0)
             load_data.clear()
             st.rerun()
-        # ★エラーを握りつぶさず画面に表示するように変更
         except Exception as e:
             st.error(f"更新エラーが発生しました: {e}")
     
@@ -175,11 +199,13 @@ if admin_pass == st.secrets["admin_password"]:
             st.error(f"更新エラーが発生しました: {e}")
             
     st.sidebar.markdown("---")
-    # ★今アプリがスプレッドシートから何を読み取っているか表示するデバッグ
     st.sidebar.info("【確認用】現在の認識データ")
     st.sidebar.write(settings_dict)
 
 
+# ==========================================
+# メイン画面（タブ）
+# ==========================================
 tab1, tab2 = st.tabs(["スタートチェック", "ゴールチェック"])
 
 with tab1:
@@ -236,7 +262,7 @@ with tab1:
                         st.session_state.local_updates[f"dns_{t_no}"] = False
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
-                    except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                    except Exception as e: st.error(f"エラー: {e}")
             else:
                 col2.button("🚫 DNS", key=f"dns_done_{t_no}", disabled=True)
                 
@@ -247,7 +273,7 @@ with tab1:
                         update_start_cell(t_no, False)
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
-                    except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                    except Exception as e: st.error(f"エラー: {e}")
             else:
                 col2.button("✅ 済", key=f"start_done_{t_no}", disabled=True)
                 
@@ -257,7 +283,7 @@ with tab1:
                     update_start_cell(t_no, True)
                     st.session_state.local_updates[f"start_{t_no}"] = True
                     st.rerun()
-                except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                except Exception as e: st.error(f"エラー: {e}")
             
             if is_admin and col3 is not None:
                 if col3.button("🚫 棄権", key=f"dns_btn_{t_no}", type="secondary"):
@@ -266,7 +292,8 @@ with tab1:
                         st.session_state.local_updates[f"dns_{t_no}"] = True
                         st.session_state.local_updates[f"start_{t_no}"] = False
                         st.rerun()
-                    except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                    except Exception as e: st.error(f"エラー: {e}")
+
 
 with tab2:
     h_col3, h_col4 = st.columns([2.5, 1])
@@ -329,7 +356,7 @@ with tab2:
                             st.session_state.local_updates[f"finish_{t_no}"] = False
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
-                        except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                        except Exception as e: st.error(f"エラー: {e}")
                 else: col2.button("棄権済", key=f"dnf_done_{t_no}", disabled=True)
                 col4.error("DNF")
                 
@@ -341,7 +368,7 @@ with tab2:
                             st.session_state.local_updates[f"finish_{t_no}"] = False
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
-                        except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                        except Exception as e: st.error(f"エラー: {e}")
                 else: col2.button("🏁 済", key=f"finish_done_{t_no}", disabled=True)
                 
                 if start_time_val and f_time_str and f_time_str != "nan":
@@ -363,7 +390,7 @@ with tab2:
                         st.session_state.local_updates[f"finish_{t_no}"] = True
                         st.session_state.local_updates[f"time_{t_no}"] = now_str
                         st.rerun()
-                    except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                    except Exception as e: st.error(f"エラー: {e}")
                 
                 if is_admin and col3 is not None:
                     if col3.button("⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
@@ -373,4 +400,4 @@ with tab2:
                             st.session_state.local_updates[f"finish_{t_no}"] = True
                             st.session_state.local_updates[f"time_{t_no}"] = ""
                             st.rerun()
-                        except Exception: st.toast("⚠️ 更新エラー", icon="⚠️")
+                        except Exception as e: st.error(f"エラー: {e}")
