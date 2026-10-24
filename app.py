@@ -12,19 +12,19 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
-    /* ボタンの余白と高さを調整 */
+    /* -------------------------------------
+       ボタン全体の基本設定（大きくする）
+    -------------------------------------- */
     div.stButton > button {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    
-    /* ボタン内部の文字サイズを強制的に大きくする */
     div.stButton > button p {
         font-size: 24px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
     }
-
+    
     /* -------------------------------------
        ★特定のボタン（更新ボタンなど）だけ小さくする設定
     -------------------------------------- */
@@ -36,7 +36,9 @@ st.markdown("""
         font-weight: normal !important;
     }
     
-    /* レイアウト調整用設定 */
+    /* -------------------------------------
+       レイアウト調整用設定
+    -------------------------------------- */
     .title-box div[data-testid="stHorizontalBlock"] {
         display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
     }
@@ -215,14 +217,18 @@ with tab1:
     st.markdown('<div class="title-box">', unsafe_allow_html=True)
     t_col1, t_col2 = st.columns([3, 1])
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
-    if t_col2.button("🔄 更新", key="upd_start"):
-        st.session_state.local_updates.clear()
-        if time.time() - global_sync["last_read_time"] >= 5.0:
-            load_data.clear()
-            st.rerun()
-        else:
-            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-            st.rerun()
+    
+    # ★ ここでマーカーを埋め込んで更新ボタンを小さくしています
+    with t_col2:
+        st.markdown('<div class="small-btn-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        if st.button("🔄 更新", key="upd_start", use_container_width=True):
+            st.session_state.local_updates.clear()
+            if time.time() - global_sync["last_read_time"] >= 5.0:
+                load_data.clear()
+                st.rerun()
+            else:
+                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
@@ -298,7 +304,6 @@ with tab1:
             st.markdown("---")
         st.caption("【スタート前_チェック済・棄権一覧】")
         
-        # ▼ここから変更：済・棄権のリストを横3列に並べる
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(done_df), grid_cols):
@@ -312,8 +317,7 @@ with tab1:
 
                 if is_dns:
                     if is_admin:
-                        # 長いとレイアウトが崩れるため「取消」と短くしています
-                        if cols[idx].button(f" {no_str}:棄権取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary"):
                             try:
                                 update_dns_cells(t_no, False)
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
@@ -324,8 +328,7 @@ with tab1:
                         cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True)
                 elif is_start:
                     if is_admin:
-                        # 長いとレイアウトが崩れるため「取消」と短くしています
-                        if cols[idx].button(f" {no_str}:スタート取消", key=f"start_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary"):
                             try:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
@@ -341,14 +344,18 @@ with tab2:
     st.markdown('<div class="title-box">', unsafe_allow_html=True)
     t_col3, t_col4 = st.columns([3, 1])
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
-    if t_col4.button("🔄 更新", key="upd_finish"):
-        st.session_state.local_updates.clear()
-        if time.time() - global_sync["last_read_time"] >= 5.0:
-            load_data.clear()
-            st.rerun()
-        else:
-            st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
-            st.rerun()
+    
+    # ★ ここでマーカーを埋め込んで更新ボタンを小さくしています
+    with t_col4:
+        st.markdown('<div class="small-btn-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        if st.button("🔄 更新", key="upd_finish", use_container_width=True):
+            st.session_state.local_updates.clear()
+            if time.time() - global_sync["last_read_time"] >= 5.0:
+                load_data.clear()
+                st.rerun()
+            else:
+                st.toast("⏳ 最新キャッシュを表示", icon="ℹ️")
+                st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     
     if not finish_enabled:
@@ -371,7 +378,6 @@ with tab2:
         started_df = df_finish_view[df_finish_view['Start_Check'] & (~df_finish_view['DNS'])]
         filter_finish = st.radio("状態フィルター(ゴール)", ["すべて", "未ゴール", "ゴール済 (DNF含)"], horizontal=True, label_visibility="collapsed", key="f_finish")
         
-        # ▼ここから変更：DNFが確実にゴール済に含まれるように修正
         if filter_finish == "未ゴール":
             view_df2 = started_df[(~started_df['Finish_Check']) & (~started_df['DNF'])]
         elif filter_finish == "ゴール済 (DNF含)":
@@ -436,10 +442,8 @@ with tab2:
                     except Exception:
                         pass
                 
-                # 改行（<br>）を入れ、2行が右揃えになるように div タグで囲む
                 time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
                 
-                # 余分な <span> を外し、直接 time_info を入れる
                 card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
 
                 if is_admin:
