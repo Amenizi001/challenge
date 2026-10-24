@@ -9,23 +9,42 @@ st.set_page_config(page_title="マラソン大会 チェックシステム", lay
 
 JST = ZoneInfo("Asia/Tokyo")
 
-# --- UI最適化CSS ---
+# --- UI最適化CSS（スマホでの縦落ち強制防止 ＆ 番号順表示） ---
 st.markdown("""
 <style>
 .block-container {
     padding-top: 0.5rem !important;
     padding-bottom: 2rem !important;
-    padding-left: 0.4rem !important;
-    padding-right: 0.4rem !important;
+    padding-left: 0.3rem !important;
+    padding-right: 0.3rem !important;
+    max-width: 100% !important;
 }
 header[data-testid="stHeader"] {
     display: none !important;
 }
 
-/* ボタンサイズと文字折り返しの最適化 */
+/* スマホ表示でもカラムを絶対に縦落ちさせず横3等分に維持する */
+div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 4px !important;
+    margin-bottom: 4px !important;
+    width: 100% !important;
+}
+
+div[data-testid="column"] {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    width: 100% !important;
+    margin-bottom: 0px !important;
+}
+
+/* ボタンサイズと自動改行対応 */
 div[data-testid="column"] button {
     padding: 3px 2px !important;
-    font-size: 0.75rem !important;
+    font-size: 0.72rem !important;
     line-height: 1.15 !important;
     width: 100% !important;
     min-height: 38px !important;
@@ -35,6 +54,7 @@ div[data-testid="column"] button {
     justify-content: center !important;
     white-space: normal !important;
     text-align: center !important;
+    box-sizing: border-box !important;
 }
 
 /* ゴール済カード（1段1チーム用） */
@@ -47,7 +67,9 @@ div[data-testid="column"] button {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
+    width: 100%;
+    box-sizing: border-box;
 }
 .finish-no {
     font-weight: bold;
@@ -73,6 +95,9 @@ div[data-testid="column"] button {
     align-items: center;
     color: #664d03;
     font-weight: bold;
+    font-size: 0.78rem;
+    width: 100%;
+    box-sizing: border-box;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -295,7 +320,6 @@ with tab1:
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
     
-    # 状態の適用（ローカル一時記憶を考慮）
     df_start_view = df.copy()
     for idx_row, row in df_start_view.iterrows():
         t_no = int(row['No'])
@@ -313,7 +337,6 @@ with tab1:
     else:
         view_df = df_start_view
         
-    # 番号帯フィルター
     if not df.empty:
         max_no = int(df['No'].max())
         range_options = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no + 1, 10)]
@@ -323,8 +346,11 @@ with tab1:
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
 
+    # ★ チーム番号順に確実にソート
+    view_df = view_df.sort_values(by="No")
+
     # 1. 未チェックのチーム（上段にグリッド表示）
-    uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])]
+    uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
     if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【未チェック】タップしてスタート完了")
         grid_cols = 3
@@ -341,7 +367,7 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 管理者の場合のみ：未チェックチームの「棄権(DNS)登録ボタン」を下に並べる
+    # 管理者の場合：未チェックチームの「棄権(DNS)登録ボタン」
     if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
         st.caption("【管理者用：出走前棄権(DNS)登録】")
         grid_cols = 3
@@ -359,8 +385,8 @@ with tab1:
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
 
-    # 2. チェック済み・DNSのチーム（下段に一覧表示）
-    done_df = view_df[view_df['Start_Check'] | view_df['DNS']]
+    # 2. チェック済み・DNSのチーム（下段に昇順で表示）
+    done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
@@ -410,7 +436,6 @@ with tab2:
     if not finish_enabled:
         st.warning("現在、ゴールチェック機能はロックされています。")
     else:
-        # ローカル一時記憶の反映
         df_finish_view = df.copy()
         for idx_row, row in df_finish_view.iterrows():
             t_no = int(row['No'])
@@ -435,7 +460,6 @@ with tab2:
         else:
             view_df2 = started_df
             
-        # 番号帯フィルター
         if not df.empty:
             max_no2 = int(df['No'].max())
             range_options2 = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no2 + 1, 10)]
@@ -445,8 +469,11 @@ with tab2:
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
 
+        # ★ チーム番号順に確実にソート
+        view_df2 = view_df2.sort_values(by="No")
+
         # --- ① 最上段：未ゴールチームの「001:ゴール」ボタン群（グリッド表示） ---
-        unfinish_df = view_df2[~view_df2['Finish_Check']]
+        unfinish_df = view_df2[~view_df2['Finish_Check']].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
             grid_cols = 3
@@ -465,8 +492,8 @@ with tab2:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
 
-        # --- ② 中段：ゴール済みチームの一覧（1行1チーム表示） ---
-        finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])]
+        # --- ② 中段：ゴール済みチームの一覧（1行1チーム表示・番号昇順） ---
+        finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             if filter_finish == "すべて":
                 st.markdown("---")
@@ -511,7 +538,7 @@ with tab2:
                 else:
                     st.markdown(card_html, unsafe_allow_html=True)
 
-        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群（グリッド表示） ---
+        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群 ---
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
@@ -531,8 +558,8 @@ with tab2:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
 
-        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧 ---
-        dnf_df = view_df2[view_df2['DNF']]
+        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧（番号昇順） ---
+        dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
             st.caption("【途中棄権(DNF)一覧】")
