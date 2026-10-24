@@ -295,12 +295,25 @@ with tab1:
         
     filter_start = st.radio("状態フィルター(スタート)", ["すべて", "未チェック", "チェック済", "DNS(棄権)"], horizontal=True, label_visibility="collapsed", key="f_start")
     
-    if filter_start == "未チェック": view_df = df[(~df['Start_Check']) & (~df['DNS'])]
-    elif filter_start == "チェック済": view_df = df[df['Start_Check']]
-    elif filter_start == "DNS(棄権)": view_df = df[df['DNS']]
-    else: view_df = df
+    # 状態の適用（ローカル一時記憶を考慮）
+    df_start_view = df.copy()
+    for idx_row, row in df_start_view.iterrows():
+        t_no = int(row['No'])
+        if f"start_{t_no}" in st.session_state.local_updates:
+            df_start_view.at[idx_row, 'Start_Check'] = st.session_state.local_updates[f"start_{t_no}"]
+        if f"dns_{t_no}" in st.session_state.local_updates:
+            df_start_view.at[idx_row, 'DNS'] = st.session_state.local_updates[f"dns_{t_no}"]
+
+    if filter_start == "未チェック":
+        view_df = df_start_view[(~df_start_view['Start_Check']) & (~df_start_view['DNS'])]
+    elif filter_start == "チェック済":
+        view_df = df_start_view[df_start_view['Start_Check']]
+    elif filter_start == "DNS(棄権)":
+        view_df = df_start_view[df_start_view['DNS']]
+    else:
+        view_df = df_start_view
         
-    # 番号帯フィルター（ラジオボタンチェック方式）
+    # 番号帯フィルター
     if not df.empty:
         max_no = int(df['No'].max())
         range_options = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no + 1, 10)]
@@ -310,13 +323,14 @@ with tab1:
             s_num, e_num = map(int, selected_range_start.split("～"))
             view_df = view_df[(view_df['No'] >= s_num) & (view_df['No'] <= e_num)]
 
-    # 未チェックのみの場合は横に並べるグリッド表示、管理・取消を含む場合は行単位
-    if filter_start == "未チェック" and not is_admin:
-        # スマホで横に並ぶ分（3列）グリッド配置し、並びきらない分は自動折り返し
+    # 1. 未チェックのチーム（上段にグリッド表示）
+    uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])]
+    if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
+        st.caption("【未チェック】タップしてスタート完了")
         grid_cols = 3
-        for i in range(0, len(view_df), grid_cols):
+        for i in range(0, len(uncheck_df), grid_cols):
             cols = st.columns(grid_cols)
-            batch = view_df.iloc[i:i+grid_cols]
+            batch = uncheck_df.iloc[i:i+grid_cols]
             for idx, (_, row) in enumerate(batch.iterrows()):
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
@@ -326,15 +340,36 @@ with tab1:
                         st.session_state.local_updates[f"start_{t_no}"] = True
                         st.rerun()
                     except Exception as e: st.error(f"エラー: {e}")
-    else:
-        for _, row in view_df.iterrows():
+
+    # 管理者の場合のみ：未チェックチームの「棄権(DNS)登録ボタン」を下に並べる
+    if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
+        st.caption("【管理者用：出走前棄権(DNS)登録】")
+        grid_cols = 3
+        for i in range(0, len(uncheck_df), grid_cols):
+            cols = st.columns(grid_cols)
+            batch = uncheck_df.iloc[i:i+grid_cols]
+            for idx, (_, row) in enumerate(batch.iterrows()):
+                t_no = int(row['No'])
+                no_str = f"{t_no:03d}"
+                if cols[idx].button(f"🚫 {no_str}:棄権", key=f"dns_btn_{t_no}", type="secondary"):
+                    try:
+                        update_dns_cells(t_no, True)
+                        st.session_state.local_updates[f"dns_{t_no}"] = True
+                        st.session_state.local_updates[f"start_{t_no}"] = False
+                        st.rerun()
+                    except Exception as e: st.error(f"エラー: {e}")
+
+    # 2. チェック済み・DNSのチーム（下段に一覧表示）
+    done_df = view_df[view_df['Start_Check'] | view_df['DNS']]
+    if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
+        if filter_start == "すべて":
+            st.markdown("---")
+            st.caption("【スタート済・棄権一覧】")
+        for _, row in done_df.iterrows():
             t_no = int(row['No'])
             no_str = f"{t_no:03d}"
-            
             is_start = row['Start_Check']
             is_dns = row['DNS']
-            if f"start_{t_no}" in st.session_state.local_updates: is_start = st.session_state.local_updates[f"start_{t_no}"]
-            if f"dns_{t_no}" in st.session_state.local_updates: is_dns = st.session_state.local_updates[f"dns_{t_no}"]
 
             if is_dns:
                 if is_admin:
@@ -346,8 +381,7 @@ with tab1:
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
                 else:
-                    st.button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True)
-                    
+                    st.button(f"{no_str}:DNS(棄権)", key=f"dns_done_{t_no}", disabled=True)
             elif is_start:
                 if is_admin:
                     if st.button(f"❌ {no_str}:スタートチェック取消す", key=f"start_cancel_{t_no}", type="secondary"):
@@ -358,23 +392,6 @@ with tab1:
                         except Exception as e: st.error(f"エラー: {e}")
                 else:
                     st.button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True)
-                    
-            else:
-                if is_admin:
-                    c1, c2 = st.columns([1.2, 1.2])
-                    if c1.button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary"):
-                        try:
-                            update_start_cell(t_no, True)
-                            st.session_state.local_updates[f"start_{t_no}"] = True
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-                    if c2.button(f"🚫 棄権", key=f"dns_btn_{t_no}", type="secondary"):
-                        try:
-                            update_dns_cells(t_no, True)
-                            st.session_state.local_updates[f"dns_{t_no}"] = True
-                            st.session_state.local_updates[f"start_{t_no}"] = False
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
 
 
 # --- タブ2：ゴールチェック ---
@@ -393,14 +410,32 @@ with tab2:
     if not finish_enabled:
         st.warning("現在、ゴールチェック機能はロックされています。")
     else:
-        started_df = df[df['Start_Check'] & (~df['DNS'])]
+        # ローカル一時記憶の反映
+        df_finish_view = df.copy()
+        for idx_row, row in df_finish_view.iterrows():
+            t_no = int(row['No'])
+            if f"start_{t_no}" in st.session_state.local_updates:
+                df_finish_view.at[idx_row, 'Start_Check'] = st.session_state.local_updates[f"start_{t_no}"]
+            if f"dns_{t_no}" in st.session_state.local_updates:
+                df_finish_view.at[idx_row, 'DNS'] = st.session_state.local_updates[f"dns_{t_no}"]
+            if f"finish_{t_no}" in st.session_state.local_updates:
+                df_finish_view.at[idx_row, 'Finish_Check'] = st.session_state.local_updates[f"finish_{t_no}"]
+            if f"dnf_{t_no}" in st.session_state.local_updates:
+                df_finish_view.at[idx_row, 'DNF'] = st.session_state.local_updates[f"dnf_{t_no}"]
+            if f"time_{t_no}" in st.session_state.local_updates:
+                df_finish_view.at[idx_row, 'Finish_Check_Time'] = st.session_state.local_updates[f"time_{t_no}"]
+
+        started_df = df_finish_view[df_finish_view['Start_Check'] & (~df_finish_view['DNS'])]
         filter_finish = st.radio("状態フィルター(ゴール)", ["すべて", "未ゴール", "ゴール済 (DNF含)"], horizontal=True, label_visibility="collapsed", key="f_finish")
         
-        if filter_finish == "未ゴール": view_df2 = started_df[~started_df['Finish_Check']]
-        elif filter_finish == "ゴール済 (DNF含)": view_df2 = started_df[started_df['Finish_Check']]
-        else: view_df2 = started_df
+        if filter_finish == "未ゴール":
+            view_df2 = started_df[~started_df['Finish_Check']]
+        elif filter_finish == "ゴール済 (DNF含)":
+            view_df2 = started_df[started_df['Finish_Check']]
+        else:
+            view_df2 = started_df
             
-        # 番号帯フィルター（ラジオボタンチェック方式）
+        # 番号帯フィルター
         if not df.empty:
             max_no2 = int(df['No'].max())
             range_options2 = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no2 + 1, 10)]
@@ -409,13 +444,15 @@ with tab2:
             if selected_range_finish != "すべて":
                 s_num, e_num = map(int, selected_range_finish.split("～"))
                 view_df2 = view_df2[(view_df2['No'] >= s_num) & (view_df2['No'] <= e_num)]
-            
-        # 未ゴールのみの場合は横に並べるグリッド配置（一般スタッフ時）
-        if filter_finish == "未ゴール" and not is_admin:
+
+        # --- ① 最上段：未ゴールチームの「001:ゴール」ボタン群（グリッド表示） ---
+        unfinish_df = view_df2[~view_df2['Finish_Check']]
+        if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
+            st.caption("【未ゴール】タップしてゴール完了")
             grid_cols = 3
-            for i in range(0, len(view_df2), grid_cols):
+            for i in range(0, len(unfinish_df), grid_cols):
                 cols = st.columns(grid_cols)
-                batch = view_df2.iloc[i:i+grid_cols]
+                batch = unfinish_df.iloc[i:i+grid_cols]
                 for idx, (_, row) in enumerate(batch.iterrows()):
                     t_no = int(row['No'])
                     no_str = f"{t_no:03d}"
@@ -427,20 +464,18 @@ with tab2:
                             st.session_state.local_updates[f"time_{t_no}"] = now_str
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
-        else:
-            for _, row in view_df2.iterrows():
+
+        # --- ② 中段：ゴール済みチームの一覧（1行1チーム表示） ---
+        finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])]
+        if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
+            if filter_finish == "すべて":
+                st.markdown("---")
+            st.caption("【ゴール済みチーム一覧】")
+            for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                
-                is_dnf = row['DNF']
-                is_finished = row['Finish_Check']
                 f_time_str = str(row['Finish_Check_Time'])
-                
-                if f"dnf_{t_no}" in st.session_state.local_updates: is_dnf = st.session_state.local_updates[f"dnf_{t_no}"]
-                if f"finish_{t_no}" in st.session_state.local_updates: is_finished = st.session_state.local_updates[f"finish_{t_no}"]
-                if f"time_{t_no}" in st.session_state.local_updates: f_time_str = st.session_state.local_updates[f"time_{t_no}"]
 
-                # ネットタイム・通過時刻のフォーマット
                 net_jp = ""
                 time_jp = ""
                 if f_time_str and f_time_str != "nan":
@@ -460,66 +495,60 @@ with tab2:
                     except Exception:
                         pass
 
-                # 1. DNF（途中棄権）の1段表示
-                if is_dnf:
-                    if is_admin:
-                        col_card, col_btn = st.columns([2.5, 1.2])
-                        col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (棄権)</span></div>", unsafe_allow_html=True)
-                        if col_btn.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
-                            try:
-                                update_dnf_cells(t_no, False, False, "")
-                                st.session_state.local_updates[f"dnf_{t_no}"] = False
-                                st.session_state.local_updates[f"finish_{t_no}"] = False
-                                st.session_state.local_updates[f"time_{t_no}"] = ""
-                                st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
-                    else:
-                        st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                time_info = f"<span class='finish-time'>タイム: {net_jp}</span> <span class='finish-clock'>(着 {time_jp})</span>" if net_jp else f"<span class='finish-clock'>着 {time_jp}</span>"
+                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
 
-                # 2. ゴール済みの1段表示（チームNo、タイム、ゴール時刻）
-                elif is_finished:
-                    time_info = f"<span class='finish-time'>タイム: {net_jp}</span> <span class='finish-clock'>(着 {time_jp})</span>" if net_jp else f"<span class='finish-clock'>着 {time_jp}</span>"
-                    card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span><span>{time_info}</span></div>"
-                    
-                    if is_admin:
-                        col_card, col_btn = st.columns([2.5, 1.2])
-                        col_card.markdown(card_html, unsafe_allow_html=True)
-                        if col_btn.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
-                            try:
-                                update_finish_cells(t_no, False, "")
-                                st.session_state.local_updates[f"finish_{t_no}"] = False
-                                st.session_state.local_updates[f"time_{t_no}"] = ""
-                                st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
-                    else:
-                        st.markdown(card_html, unsafe_allow_html=True)
-
-                # 3. 未ゴール
+                if is_admin:
+                    col_card, col_btn = st.columns([2.5, 1.2])
+                    col_card.markdown(card_html, unsafe_allow_html=True)
+                    if col_btn.button("❌ ゴール取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                        try:
+                            update_finish_cells(t_no, False, "")
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e: st.error(f"エラー: {e}")
                 else:
-                    if is_admin:
-                        c1, c2 = st.columns([1.2, 1.2])
-                        if c1.button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary"):
-                            try:
-                                now_str = datetime.datetime.now(JST).strftime('%H:%M:%S')
-                                update_finish_cells(t_no, True, now_str)
-                                st.session_state.local_updates[f"finish_{t_no}"] = True
-                                st.session_state.local_updates[f"time_{t_no}"] = now_str
-                                st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
-                        if c2.button(f"⚠️ 棄権", key=f"dnf_btn_{t_no}", type="secondary"):
-                            try:
-                                update_dnf_cells(t_no, True, True, "")
-                                st.session_state.local_updates[f"dnf_{t_no}"] = True
-                                st.session_state.local_updates[f"finish_{t_no}"] = True
-                                st.session_state.local_updates[f"time_{t_no}"] = ""
-                                st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
-                    else:
-                        if st.button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary"):
-                            try:
-                                now_str = datetime.datetime.now(JST).strftime('%H:%M:%S')
-                                update_finish_cells(t_no, True, now_str)
-                                st.session_state.local_updates[f"finish_{t_no}"] = True
-                                st.session_state.local_updates[f"time_{t_no}"] = now_str
-                                st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                    st.markdown(card_html, unsafe_allow_html=True)
+
+        # --- ③ 下段（管理者限定）：未ゴールチームの「001:棄権(DNF)」ボタン群（グリッド表示） ---
+        if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
+            st.markdown("---")
+            st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
+            grid_cols = 3
+            for i in range(0, len(unfinish_df), grid_cols):
+                cols = st.columns(grid_cols)
+                batch = unfinish_df.iloc[i:i+grid_cols]
+                for idx, (_, row) in enumerate(batch.iterrows()):
+                    t_no = int(row['No'])
+                    no_str = f"{t_no:03d}"
+                    if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_btn_{t_no}", type="secondary"):
+                        try:
+                            update_dnf_cells(t_no, True, True, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = True
+                            st.session_state.local_updates[f"finish_{t_no}"] = True
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e: st.error(f"エラー: {e}")
+
+        # --- ④ 最下段：すでにDNF（途中棄権）済みのチーム一覧 ---
+        dnf_df = view_df2[view_df2['DNF']]
+        if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
+            st.markdown("---")
+            st.caption("【途中棄権(DNF)一覧】")
+            for _, row in dnf_df.iterrows():
+                t_no = int(row['No'])
+                no_str = f"{t_no:03d}"
+                if is_admin:
+                    col_card, col_btn = st.columns([2.5, 1.2])
+                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                    if col_btn.button("↩️ DNF取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                        try:
+                            update_dnf_cells(t_no, False, False, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = False
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e: st.error(f"エラー: {e}")
+                else:
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
