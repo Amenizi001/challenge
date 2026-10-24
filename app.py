@@ -24,6 +24,17 @@ st.markdown("""
         font-weight: bold !important; 
         margin: 0 !important;
     }
+
+    /* -------------------------------------
+       ★特定のボタン（更新ボタンなど）だけ小さくする設定
+    -------------------------------------- */
+    div[data-testid="element-container"]:has(.small-btn-marker) + div[data-testid="element-container"] div.stButton > button {
+        padding: 6px 12px !important; 
+    }
+    div[data-testid="element-container"]:has(.small-btn-marker) + div[data-testid="element-container"] div.stButton > button p {
+        font-size: 16px !important; 
+        font-weight: normal !important;
+    }
     
     /* レイアウト調整用設定 */
     .title-box div[data-testid="stHorizontalBlock"] {
@@ -302,7 +313,7 @@ with tab1:
                 if is_dns:
                     if is_admin:
                         # 長いとレイアウトが崩れるため「取消」と短くしています
-                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f" {no_str}:棄権取消", key=f"dns_cancel_{t_no}", type="secondary"):
                             try:
                                 update_dns_cells(t_no, False)
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
@@ -314,7 +325,7 @@ with tab1:
                 elif is_start:
                     if is_admin:
                         # 長いとレイアウトが崩れるため「取消」と短くしています
-                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary"):
+                        if cols[idx].button(f" {no_str}:スタート取消", key=f"start_cancel_{t_no}", type="secondary"):
                             try:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
