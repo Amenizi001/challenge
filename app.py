@@ -5,6 +5,30 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="マラソン大会 チェックシステム")
 
+# --- アプリ全体のパスワード認証 ---
+def check_password():
+    """利用者が正しいパスワードを入力したか確認する関数"""
+    def password_entered():
+        if st.session_state["app_pwd"] == st.secrets["app_password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["app_pwd"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("アプリの利用パスワードを入力してください", type="password", on_change=password_entered, key="app_pwd")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("アプリの利用パスワードを入力してください", type="password", on_change=password_entered, key="app_pwd")
+        st.error("パスワードが正しくありません")
+        return False
+    return True
+
+# パスワードが正しくない場合はここで処理を停止
+if not check_password():
+    st.stop()
+
+
 # --- セッションステートの初期化 ---
 if 'admin_finish_enabled' not in st.session_state:
     st.session_state.admin_finish_enabled = False
@@ -12,10 +36,10 @@ if 'start_time' not in st.session_state:
     st.session_state.start_time = None
 
 # --- スプレッドシート接続とデータ読み込み ---
+# secrets.tomlの [connections.gsheets] に記載されたURLから自動で読み込みます
 conn = st.connection("gsheets", type=GSheetsConnection)
 try:
-    df = conn.read(ttl=0) # ttl=0で常に最新データを取得
-    # データ型の調整（空欄をFalseとして扱う）
+    df = conn.read(ttl=0) 
     df['Start_Check'] = df['Start_Check'].fillna(False).astype(bool)
     df['Finish_Check'] = df['Finish_Check'].fillna(False).astype(bool)
 except Exception as e:
@@ -26,7 +50,8 @@ except Exception as e:
 st.sidebar.header("管理者メニュー")
 admin_pass = st.sidebar.text_input("管理者パスワードを入力", type="password")
 
-if admin_pass == "admin123":
+# 管理者パスワードをシークレットから照合
+if admin_pass == st.secrets["admin_password"]:
     st.sidebar.success("管理者認証成功")
     st.sidebar.subheader("ゴールチェック設定")
     st.session_state.admin_finish_enabled = st.sidebar.checkbox(
@@ -72,7 +97,7 @@ with tab1:
         
         if col2.button(btn_label, key=f"start_{row['No']}", type=btn_type):
             df.at[index, 'Start_Check'] = not row['Start_Check']
-            conn.update(data=df) # スプレッドシートを更新
+            conn.update(data=df)
             st.rerun()
 
 # ==========================================
@@ -110,7 +135,7 @@ with tab2:
                 else:
                     df.at[index, 'Finish_Check'] = False
                     df.at[index, 'Finish_Check_Time'] = ""
-                conn.update(data=df) # スプレッドシートを更新
+                conn.update(data=df)
                 st.rerun()
                 
             if row['Finish_Check']:
@@ -119,7 +144,6 @@ with tab2:
                 
                 if s_time and f_time_str:
                     try:
-                        # 文字列から時刻オブジェクトに変換して計算
                         f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
                         f_datetime = datetime.datetime.combine(datetime.date.today(), f_time_obj)
                         net_time = f_datetime - s_time
