@@ -38,15 +38,15 @@ st.markdown("""
     }
 
     /* ---------------------------------------------------
-       3. 更新ボタン用特別設定：マーカー（.update-marker）の直下
-          （さらに極小サイズにする）
+       3. 更新ボタン用特別設定：強制縮小機能（scale）を使用！
     ---------------------------------------------------- */
     div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button {
-        padding: 2px 6px !important; 
-        min-height: 0 !important;
+        padding: 4px 10px !important; 
+        transform: scale(0.7); /* ← ここで強制的に70%サイズに縮小！(0.6にすると更に小さくなります) */
+        transform-origin: right center; /* 右寄せのまま縮小 */
     }
     div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button p {
-        font-size: 12px !important; /* ←ここで更新ボタンの文字サイズを調整 */
+        font-size: 14px !important; 
         font-weight: normal !important;
         line-height: 1.2 !important;
     }
@@ -235,7 +235,6 @@ with tab1:
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
     with t_col2:
-        # ★ ここを update-marker に変更しています
         st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_start"):
             st.session_state.local_updates.clear()
@@ -362,7 +361,6 @@ with tab2:
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     
     with t_col4:
-        # ★ ここを update-marker に変更しています
         st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_finish"):
             st.session_state.local_updates.clear()
