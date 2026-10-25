@@ -520,7 +520,7 @@ with tab2:
                         except Exception as e: st.error(f"エラー: {e}")
                     st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
 
 # --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
 with tab3:
