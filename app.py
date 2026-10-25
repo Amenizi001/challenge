@@ -14,7 +14,6 @@ st.markdown("""
 <style>
     /* ---------------------------------------------------
        ★ 3列グリッド（st.columns(3)）の中にあるボタンだけを狙って「特大（35px）」にする
-       （古いブラウザやSafariでも確実に動く、CSSの子要素カウント機能を使用）
     ---------------------------------------------------- */
     div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton > button,
     div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton > button {
@@ -184,11 +183,9 @@ except Exception:
 settings_dict = {k: v for k, v in zip(df['Key'], df['Value']) if k != ""}
 finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
-# ★ スタート時刻の読み込みを強固に（先頭の ' がある場合は除去）
 start_time_str = str(settings_dict.get('start_time', '')).lstrip("'").strip()
 if start_time_str and start_time_str.lower() != 'nan':
     try:
-        # 秒以下のゴミがあっても安全にパースできるよう [:19] でカット
         start_time_val = datetime.datetime.strptime(start_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
     except Exception:
         start_time_val = None
@@ -206,7 +203,7 @@ if "is_admin" not in st.session_state:
 is_admin = st.session_state.is_admin
 
 # ==========================================
-# メイン画面（3タブ構成に変更）
+# メイン画面（3タブ構成）
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🚩 スタート", "🏁 ゴール", "⚙️ 管理者"])
 
@@ -256,83 +253,71 @@ with tab1:
 
     view_df = view_df.sort_values(by="No")
 
-    uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])].sort_values(by="No")
-    if not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
-        st.caption("【スタート前_未チェック一覧】")
+    # ----- 変更部分：すべてのステータスを1つのグリッドで番号順に表示（レイアウト崩れ対策版） -----
+    if not view_df.empty:
+        st.caption(f"【{filter_start}一覧】")
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
-        for i in range(0, len(uncheck_df), grid_cols):
+        for i in range(0, len(view_df), grid_cols):
             cols = st.columns(grid_cols)
-            batch = uncheck_df.iloc[i:i+grid_cols]
-            for idx, (_, row) in enumerate(batch.iterrows()):
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
-                    try:
-                        update_start_cell(t_no, True)
-                        st.session_state.local_updates[f"start_{t_no}"] = True
-                        st.rerun()
-                    except Exception as e: st.error(f"エラー: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    if is_admin and not uncheck_df.empty and filter_start in ["すべて", "未チェック"]:
-        st.caption("【管理者用：出走前棄権(DNS)登録】")
-        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
-        grid_cols = 3
-        for i in range(0, len(uncheck_df), grid_cols):
-            cols = st.columns(grid_cols)
-            batch = uncheck_df.iloc[i:i+grid_cols]
-            for idx, (_, row) in enumerate(batch.iterrows()):
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                if cols[idx].button(f"🚫 {no_str}:棄権", key=f"dns_btn_{t_no}", type="secondary", use_container_width=True):
-                    try:
-                        update_dns_cells(t_no, True)
-                        st.session_state.local_updates[f"dns_{t_no}"] = True
-                        st.session_state.local_updates[f"start_{t_no}"] = False
-                        st.rerun()
-                    except Exception as e: st.error(f"エラー: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    done_df = view_df[view_df['Start_Check'] | view_df['DNS']].sort_values(by="No")
-    if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
-        if filter_start == "すべて":
-            st.markdown("---")
-        st.caption("【スタート前_チェック済・棄権一覧】")
-        
-        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
-        grid_cols = 3
-        for i in range(0, len(done_df), grid_cols):
-            cols = st.columns(grid_cols)
-            batch = done_df.iloc[i:i+grid_cols]
+            batch = view_df.iloc[i:i+grid_cols]
             for idx, (_, row) in enumerate(batch.iterrows()):
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 is_start = row['Start_Check']
                 is_dns = row['DNS']
 
-                if is_dns:
-                    if is_admin:
-                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
+                if is_admin:
+                    # 管理者の場合は「状態表示(無効ボタン)」＋「アクション」の2段構成に統一し、高さを完璧に揃える
+                    if is_dns:
+                        cols[idx].button(f"{no_str}:DNS", key=f"disp_dns_{t_no}", disabled=True, use_container_width=True)
+                        if cols[idx].button(f"↩️ 取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_dns_cells(t_no, False)
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
-                    else:
-                        cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True, use_container_width=True)
-                elif is_start:
-                    if is_admin:
-                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
+                    elif is_start:
+                        cols[idx].button(f"{no_str}:済", key=f"disp_start_{t_no}", disabled=True, use_container_width=True)
+                        if cols[idx].button(f"❌ 取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
                     else:
+                        if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
+                            try:
+                                update_start_cell(t_no, True)
+                                st.session_state.local_updates[f"start_{t_no}"] = True
+                                st.rerun()
+                            except Exception as e: st.error(f"エラー: {e}")
+                        if cols[idx].button(f"🚫 棄権", key=f"dns_btn_{t_no}", type="secondary", use_container_width=True):
+                            try:
+                                update_dns_cells(t_no, True)
+                                st.session_state.local_updates[f"dns_{t_no}"] = True
+                                st.session_state.local_updates[f"start_{t_no}"] = False
+                                st.rerun()
+                            except Exception as e: st.error(f"エラー: {e}")
+                else:
+                    # 一般ユーザーの場合は常に1段構成
+                    if is_dns:
+                        cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True, use_container_width=True)
+                    elif is_start:
                         cols[idx].button(f"{no_str}:済", key=f"start_done_{t_no}", disabled=True, use_container_width=True)
+                    else:
+                        if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
+                            try:
+                                update_start_cell(t_no, True)
+                                st.session_state.local_updates[f"start_{t_no}"] = True
+                                st.rerun()
+                            except Exception as e: st.error(f"エラー: {e}")
+
         st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("該当する番号はありません。")
+    # -----------------------------------------------------------------
 
 
 # --- タブ2：ゴールチェック ---
@@ -402,7 +387,6 @@ with tab2:
                     no_str = f"{t_no:03d}"
                     if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary", use_container_width=True):
                         try:
-                            # ★ ゴール時刻をスプレッドシートへ記録する際、Googleの自動変換を防ぐために先頭に ' を付与
                             now_str = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
                             update_finish_cells(t_no, True, f"'{now_str}")
                             st.session_state.local_updates[f"finish_{t_no}"] = True
@@ -420,14 +404,12 @@ with tab2:
             for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                # ★ セルに記録されている文字から ' を確実に除去して扱う
                 f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
                 net_jp = ""
                 time_jp = ""
                 
                 if f_time_str and f_time_str != "nan":
                     try:
-                        # 過去のデータ(HH:MM:SS)と新しいデータ(YYYY-MM-DD HH:MM:SS)を両方パース可能に
                         if len(f_time_str) >= 19:
                             f_datetime = datetime.datetime.strptime(f_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
                         else:
@@ -438,164 +420,8 @@ with tab2:
                             else:
                                 f_datetime = datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
                         
-                        # ★ ご要望のフォーマット「YYYY-MM-DD HH:MM:SS」に変更
                         time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
                         
                         if start_time_val:
-                            # ★ 安全な時刻計算処理
                             net_seconds = int((f_datetime - start_time_val).total_seconds())
-                            if net_seconds < 0:
-                                # 万が一、スタート設定より前にゴールした時のエラーバグ防止
-                                abs_s = abs(net_seconds)
-                                h = abs_s // 3600
-                                m = (abs_s % 3600) // 60
-                                s = abs_s % 60
-                                net_jp = f"-(マイナス){h}時間{m:02d}分{s:02d}秒" if h > 0 else f"-(マイナス){m:02d}分{s:02d}秒"
-                            else:
-                                h = net_seconds // 3600
-                                m = (net_seconds % 3600) // 60
-                                s = net_seconds % 60
-                                net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
-                    except Exception:
-                        time_jp = "時刻エラー"
-                
-                time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
-                
-                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
-
-                if is_admin:
-                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
-                    col_card, col_btn = st.columns([3, 1])
-                    col_card.markdown(card_html, unsafe_allow_html=True)
-                    if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
-                        try:
-                            update_finish_cells(t_no, False, "")
-                            st.session_state.local_updates[f"finish_{t_no}"] = False
-                            st.session_state.local_updates[f"time_{t_no}"] = ""
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(card_html, unsafe_allow_html=True)
-
-        if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
-            st.markdown("---")
-            st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
-            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
-            grid_cols = 3
-            for i in range(0, len(unfinish_df), grid_cols):
-                cols = st.columns(grid_cols)
-                batch = unfinish_df.iloc[i:i+grid_cols]
-                for idx, (_, row) in enumerate(batch.iterrows()):
-                    t_no = int(row['No'])
-                    no_str = f"{t_no:03d}"
-                    if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_btn_{t_no}", type="secondary", use_container_width=True):
-                        try:
-                            update_dnf_cells(t_no, True, True, "")
-                            st.session_state.local_updates[f"dnf_{t_no}"] = True
-                            st.session_state.local_updates[f"finish_{t_no}"] = True
-                            st.session_state.local_updates[f"time_{t_no}"] = ""
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
-        if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
-            st.markdown("---")
-            st.caption("【途中棄権(DNF)確定一覧】")
-            for _, row in dnf_df.iterrows():
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                if is_admin:
-                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
-                    col_card, col_btn = st.columns([3, 1])
-                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
-                    if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
-                        try:
-                            update_dnf_cells(t_no, False, False, "")
-                            st.session_state.local_updates[f"dnf_{t_no}"] = False
-                            st.session_state.local_updates[f"finish_{t_no}"] = False
-                            st.session_state.local_updates[f"time_{t_no}"] = ""
-                            st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
-
-# --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
-with tab3:
-    st.markdown("<h4 style='margin:0; padding:2px 0;'>⚙️ 管理者メニュー</h4>", unsafe_allow_html=True)
-    
-    if not st.session_state.is_admin:
-        admin_input = st.text_input("管理者パスワードを入力", type="password")
-        if st.button("ログイン"):
-            if admin_input == st.secrets["admin_password"]:
-                st.session_state.is_admin = True
-                st.rerun()
-            else:
-                st.error("パスワードが正しくありません")
-    else:
-        st.success("管理者認証成功")
-        if st.button("🚪 管理者メニューから抜ける"):
-            st.session_state.is_admin = False
-            st.rerun()
-        
-        st.markdown("#### 🏁 ゴールチェック設定")
-        if finish_enabled:
-            st.success("状態: 🔓 一般開放中")
-            btn_label = "🔒 ゴールチェックをロックする"
-            new_status = False
-        else:
-            st.warning("状態: 🔒 ロック中")
-            btn_label = "🔓 ゴールチェックを一般開放する"
-            new_status = True
-            
-        if st.button(btn_label):
-            try:
-                update_setting_cell('finish_enabled', new_status)
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
-            except Exception as e:
-                st.error(f"更新エラーが発生しました: {e}")
-        
-        st.markdown("#### ⏱️ スタート時刻設定")
-        if st.button("現在時刻(JST)をスタートに設定"):
-            try:
-                # ★ スタート時刻を記録する際も、Googleの自動変換を防ぐために先頭に ' を付与
-                new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-                update_setting_cell('start_time', f"'{new_time}")
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
-            except Exception as e:
-                st.error(f"更新エラーが発生しました: {e}")
-        
-        st.markdown("---")
-        # YYYYMMDDHHMMSS形式のデフォルト値を設定
-        default_datetime_str = start_time_val.strftime('%Y%m%d%H%M%S') if start_time_val else datetime.datetime.now(JST).strftime('%Y%m%d%H%M%S')
-        manual_datetime_str = st.text_input("手動設定 (YYYYMMDDHHMMSS形式)", value=default_datetime_str, max_chars=14)
-        
-        if st.button("手動入力した時刻をセット"):
-            try:
-                # 14桁の数字であるかを簡易チェック
-                if len(manual_datetime_str) != 14 or not manual_datetime_str.isdigit():
-                    st.error("⚠️ 14桁の半角数字（例: 20241025093000）で入力してください。")
-                else:
-                    # 文字列から日時オブジェクトに変換
-                    new_manual_datetime = datetime.datetime.strptime(manual_datetime_str, '%Y%m%d%H%M%S').replace(tzinfo=JST)
-                    # ★ 手動設定時も ' を付与して記録（スプレッドシート側は既存のYYYY-MM-DD HH:MM:SSフォーマットを維持）
-                    update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
-                    time.sleep(2.0)
-                    load_data.clear()
-                    st.rerun()
-            except ValueError:
-                st.error("⚠️ 正しい日時（存在する年月日・時刻）を入力してください。")
-            except Exception as e:
-                st.error(f"更新エラーが発生しました: {e}")
-
-        st.markdown("---")
-        if start_time_val:
-            st.info(f"スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
-        else:
-            st.info("スタート時刻:\n未設定")
+              
