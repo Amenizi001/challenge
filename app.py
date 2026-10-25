@@ -13,42 +13,16 @@ JST = ZoneInfo("Asia/Tokyo")
 st.markdown("""
 <style>
     /* ---------------------------------------------------
-       1. 基本設定：すべてのボタンを「特大サイズ（35px）」にする
+       ★ 3列グリッド（幅約33%）の中にあるボタンだけを特大サイズにする
     ---------------------------------------------------- */
-    div.stButton > button {
+    div[data-testid="column"][style*="33."] div.stButton > button {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    div.stButton > button p {
+    div[data-testid="column"][style*="33."] div.stButton > button p {
         font-size: 35px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
-    }
-    
-    /* ---------------------------------------------------
-       2. 例外設定：マーカー（.small-marker）の直下にあるボタン
-          （取消ボタンや管理者メニュー用：標準サイズ）
-    ---------------------------------------------------- */
-    div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button {
-        padding: 4px 10px !important; 
-    }
-    div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button p {
-        font-size: 16px !important; 
-        font-weight: normal !important;
-    }
-
-    /* ---------------------------------------------------
-       3. 更新ボタン用特別設定：強制縮小機能（scale）を使用！
-    ---------------------------------------------------- */
-    div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button {
-        padding: 4px 10px !important; 
-        transform: scale(0.7); /* ← ここで強制的に70%サイズに縮小！(0.6にすると更に小さくなります) */
-        transform-origin: right center; /* 右寄せのまま縮小 */
-    }
-    div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button p {
-        font-size: 14px !important; 
-        font-weight: normal !important;
-        line-height: 1.2 !important;
     }
     
     /* ---------------------------------------------------
@@ -235,7 +209,6 @@ with tab1:
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
     with t_col2:
-        st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_start"):
             st.session_state.local_updates.clear()
             if time.time() - global_sync["last_read_time"] >= 5.0:
@@ -361,7 +334,6 @@ with tab2:
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     
     with t_col4:
-        st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_finish"):
             st.session_state.local_updates.clear()
             if time.time() - global_sync["last_read_time"] >= 5.0:
@@ -422,10 +394,12 @@ with tab2:
                     no_str = f"{t_no:03d}"
                     if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary", use_container_width=True):
                         try:
-                            now_str = datetime.datetime.now(JST).strftime('%H:%M:%S')
-                            update_finish_cells(t_no, True, now_str)
+                            # ★ YYYY-MM-DD HH:MM:SS フォーマットに変更
+                            now_str = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+                            # ★ 先頭に「'」をつけてスプレッドシートの勝手な時刻変換をブロック
+                            update_finish_cells(t_no, True, f"'{now_str}")
                             st.session_state.local_updates[f"finish_{t_no}"] = True
-                            st.session_state.local_updates[f"time_{t_no}"] = now_str
+                            st.session_state.local_updates[f"time_{t_no}"] = f"'{now_str}"
                             st.rerun()
                         except Exception as e: st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -438,21 +412,30 @@ with tab2:
             for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                f_time_str = str(row['Finish_Check_Time'])
+                # ★ 先頭の「'」を剥がして処理する
+                f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
                 net_jp = ""
                 time_jp = ""
                 if f_time_str and f_time_str != "nan":
                     try:
-                        f_parts = [int(p) for p in f_time_str.split(':')]
-                        time_jp = f"{f_parts[0]}時{f_parts[1]}分{f_parts[2]}秒"
+                        # ★ 新フォーマット (YYYY-MM-DD HH:MM:SS) への対応
+                        if len(f_time_str) > 10:
+                            f_datetime = datetime.datetime.strptime(f_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+                            time_jp = f"{f_datetime.hour}時{f_datetime.minute:02d}分{f_datetime.second:02d}秒"
+                        else:
+                            # 過去のフォーマット (HH:MM:SS) との互換性
+                            f_parts = [int(p) for p in f_time_str.split(':')]
+                            time_jp = f"{f_parts[0]}時{f_parts[1]:02d}分{f_parts[2]:02d}秒"
+                            if start_time_val:
+                                f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
+                                f_datetime = datetime.datetime.combine(start_time_val.date(), f_time_obj, tzinfo=JST)
+                        
                         if start_time_val:
-                            f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
-                            f_datetime = datetime.datetime.combine(start_time_val.date(), f_time_obj, tzinfo=JST)
                             net_seconds = int((f_datetime - start_time_val).total_seconds())
                             h = net_seconds // 3600
                             m = (net_seconds % 3600) // 60
                             s = net_seconds % 60
-                            net_jp = f"{h}時間{m}分{s}秒" if h > 0 else f"{m}分{s}秒"
+                            net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
                     except Exception:
                         pass
                 
@@ -464,7 +447,6 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
-                    st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
                     if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
                             update_finish_cells(t_no, False, "")
@@ -508,7 +490,6 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
-                    st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
                     if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
@@ -527,7 +508,6 @@ with tab3:
     
     if not st.session_state.is_admin:
         admin_input = st.text_input("管理者パスワードを入力", type="password")
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("ログイン"):
             if admin_input == st.secrets["admin_password"]:
                 st.session_state.is_admin = True
@@ -536,7 +516,6 @@ with tab3:
                 st.error("パスワードが正しくありません")
     else:
         st.success("管理者認証成功")
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🚪 管理者メニューから抜ける"):
             st.session_state.is_admin = False
             st.rerun()
@@ -551,7 +530,6 @@ with tab3:
             btn_label = "🔓 ゴールチェックを一般開放する"
             new_status = True
             
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button(btn_label):
             try:
                 update_setting_cell('finish_enabled', new_status)
@@ -562,9 +540,9 @@ with tab3:
                 st.error(f"更新エラーが発生しました: {e}")
         
         st.markdown("#### ⏱️ スタート時刻設定")
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("現在時刻(JST)をスタートに設定"):
             try:
+                # ★ スタート時刻も日本時間で記録
                 new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
                 update_setting_cell('start_time', new_time)
                 time.sleep(2.0)
@@ -577,7 +555,6 @@ with tab3:
         default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
         manual_time = st.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
         
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("手動入力した時刻をセット"):
             try:
                 today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
