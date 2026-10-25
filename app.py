@@ -20,14 +20,14 @@ st.markdown("""
         height: auto !important; 
     }
     div.stButton > button p {
-        font-size: 35px !important; /* ← ご希望の35px */
+        font-size: 35px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
     }
     
     /* ---------------------------------------------------
-       2. 例外設定：マーカー（.small-marker）の直下にあるボタンだけ
-          標準サイズ（16px）に縮小する
+       2. 例外設定：マーカー（.small-marker）の直下にあるボタン
+          （取消ボタンや管理者メニュー用：標準サイズ）
     ---------------------------------------------------- */
     div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button {
         padding: 4px 10px !important; 
@@ -35,6 +35,20 @@ st.markdown("""
     div[data-testid="element-container"]:has(.small-marker) + div[data-testid="element-container"] div.stButton > button p {
         font-size: 16px !important; 
         font-weight: normal !important;
+    }
+
+    /* ---------------------------------------------------
+       3. 更新ボタン用特別設定：マーカー（.update-marker）の直下
+          （さらに極小サイズにする）
+    ---------------------------------------------------- */
+    div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button {
+        padding: 2px 6px !important; 
+        min-height: 0 !important;
+    }
+    div[data-testid="element-container"]:has(.update-marker) + div[data-testid="element-container"] div.stButton > button p {
+        font-size: 12px !important; /* ←ここで更新ボタンの文字サイズを調整 */
+        font-weight: normal !important;
+        line-height: 1.2 !important;
     }
     
     /* ---------------------------------------------------
@@ -221,8 +235,8 @@ with tab1:
     t_col1.markdown("<h4 style='margin:0; padding:2px 0;'>🚩 スタート</h4>", unsafe_allow_html=True)
     
     with t_col2:
-        # ★ マーカーを置いて更新ボタンを小さくする
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        # ★ ここを update-marker に変更しています
+        st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_start"):
             st.session_state.local_updates.clear()
             if time.time() - global_sync["last_read_time"] >= 5.0:
@@ -348,8 +362,8 @@ with tab2:
     t_col3.markdown("<h4 style='margin:0; padding:2px 0;'>🏁 ゴール</h4>", unsafe_allow_html=True)
     
     with t_col4:
-        # ★ マーカーを置いて更新ボタンを小さくする
-        st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        # ★ ここを update-marker に変更しています
+        st.markdown('<div class="update-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🔄 更新", key="upd_finish"):
             st.session_state.local_updates.clear()
             if time.time() - global_sync["last_read_time"] >= 5.0:
@@ -452,7 +466,6 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(card_html, unsafe_allow_html=True)
-                    # ★ マーカーを置いて取消ボタンを小さくする
                     st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
                     if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
                         try:
@@ -497,7 +510,6 @@ with tab2:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
                     col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
-                    # ★ マーカーを置いて取消ボタンを小さくする
                     st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
                     if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
@@ -517,7 +529,6 @@ with tab3:
     
     if not st.session_state.is_admin:
         admin_input = st.text_input("管理者パスワードを入力", type="password")
-        # ★ マーカー
         st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("ログイン"):
             if admin_input == st.secrets["admin_password"]:
@@ -527,7 +538,6 @@ with tab3:
                 st.error("パスワードが正しくありません")
     else:
         st.success("管理者認証成功")
-        # ★ マーカー
         st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("🚪 管理者メニューから抜ける"):
             st.session_state.is_admin = False
@@ -543,7 +553,6 @@ with tab3:
             btn_label = "🔓 ゴールチェックを一般開放する"
             new_status = True
             
-        # ★ マーカー
         st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button(btn_label):
             try:
@@ -555,7 +564,6 @@ with tab3:
                 st.error(f"更新エラーが発生しました: {e}")
         
         st.markdown("#### ⏱️ スタート時刻設定")
-        # ★ マーカー
         st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("現在時刻(JST)をスタートに設定"):
             try:
@@ -571,7 +579,6 @@ with tab3:
         default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
         manual_time = st.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
         
-        # ★ マーカー
         st.markdown('<div class="small-marker" style="display:none;"></div>', unsafe_allow_html=True)
         if st.button("手動入力した時刻をセット"):
             try:
