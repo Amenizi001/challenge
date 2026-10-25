@@ -68,7 +68,7 @@ st.markdown("""
     .dnf-card {
         background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
         padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
-        align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
+        align-items: center; color: #664d03; font-weight: bold; font-size: 1.8rem;
         width: 100%; box-sizing: border-box;
     }
 </style>
@@ -502,14 +502,14 @@ with tab2:
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
-            st.caption("【途中棄権(DNF)一覧】")
+            st.caption("【途中棄権(DNF)確定一覧】")
             for _, row in dnf_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 if is_admin:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
-                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
                     if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
@@ -589,6 +589,6 @@ with tab3:
 
         st.markdown("---")
         if start_time_val:
-            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+            st.info(f"スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
         else:
-            st.info("設定済:\n未設定")
+            st.info("スタート時刻:\n未設定")
