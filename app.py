@@ -277,7 +277,8 @@ with tab1:
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                            except Exception as e:
+                                st.error(f"エラー: {e}")
                     elif is_start:
                         cols[idx].button(f"{no_str}:済", key=f"disp_start_{t_no}", disabled=True, use_container_width=True)
                         if cols[idx].button(f"❌ 取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
@@ -285,21 +286,24 @@ with tab1:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                            except Exception as e:
+                                st.error(f"エラー: {e}")
                     else:
                         if cols[idx].button(f"{no_str}:未", key=f"start_btn_{t_no}", type="primary", use_container_width=True):
                             try:
                                 update_start_cell(t_no, True)
                                 st.session_state.local_updates[f"start_{t_no}"] = True
                                 st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                            except Exception as e:
+                                st.error(f"エラー: {e}")
                         if cols[idx].button(f"🚫 棄権", key=f"dns_btn_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_dns_cells(t_no, True)
                                 st.session_state.local_updates[f"dns_{t_no}"] = True
                                 st.session_state.local_updates[f"start_{t_no}"] = False
                                 st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                            except Exception as e:
+                                st.error(f"エラー: {e}")
                 else:
                     # 一般ユーザーの場合は常に1段構成
                     if is_dns:
@@ -312,12 +316,12 @@ with tab1:
                                 update_start_cell(t_no, True)
                                 st.session_state.local_updates[f"start_{t_no}"] = True
                                 st.rerun()
-                            except Exception as e: st.error(f"エラー: {e}")
+                            except Exception as e:
+                                st.error(f"エラー: {e}")
 
         st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("該当する番号はありません。")
-    # -----------------------------------------------------------------
 
 
 # --- タブ2：ゴールチェック ---
@@ -392,7 +396,8 @@ with tab2:
                             st.session_state.local_updates[f"finish_{t_no}"] = True
                             st.session_state.local_updates[f"time_{t_no}"] = f"'{now_str}"
                             st.rerun()
-                        except Exception as e: st.error(f"エラー: {e}")
+                        except Exception as e:
+                            st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
 
         finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
@@ -422,6 +427,4 @@ with tab2:
                         
                         time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
                         
-                        if start_time_val:
-                            net_seconds = int((f_datetime - start_time_val).total_seconds())
-              
+                        if start_t
