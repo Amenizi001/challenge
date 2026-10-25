@@ -570,20 +570,27 @@ with tab3:
                 st.rerun()
             except Exception as e:
                 st.error(f"更新エラーが発生しました: {e}")
-                
+        
         st.markdown("---")
-        default_time = start_time_val.time() if start_time_val else datetime.datetime.now(JST).time()
-        manual_time = st.time_input("手動設定 (時:分:秒)", value=default_time, step=1)
+        # YYYYMMDDHHMMSS形式のデフォルト値を設定
+        default_datetime_str = start_time_val.strftime('%Y%m%d%H%M%S') if start_time_val else datetime.datetime.now(JST).strftime('%Y%m%d%H%M%S')
+        manual_datetime_str = st.text_input("手動設定 (YYYYMMDDHHMMSS形式)", value=default_datetime_str, max_chars=14)
         
         if st.button("手動入力した時刻をセット"):
             try:
-                today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
-                new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-                # ★ 手動設定時も ' を付与して記録
-                update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
-                time.sleep(2.0)
-                load_data.clear()
-                st.rerun()
+                # 14桁の数字であるかを簡易チェック
+                if len(manual_datetime_str) != 14 or not manual_datetime_str.isdigit():
+                    st.error("⚠️ 14桁の半角数字（例: 20241025093000）で入力してください。")
+                else:
+                    # 文字列から日時オブジェクトに変換
+                    new_manual_datetime = datetime.datetime.strptime(manual_datetime_str, '%Y%m%d%H%M%S').replace(tzinfo=JST)
+                    # ★ 手動設定時も ' を付与して記録（スプレッドシート側は既存のYYYY-MM-DD HH:MM:SSフォーマットを維持）
+                    update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+                    time.sleep(2.0)
+                    load_data.clear()
+                    st.rerun()
+            except ValueError:
+                st.error("⚠️ 正しい日時（存在する年月日・時刻）を入力してください。")
             except Exception as e:
                 st.error(f"更新エラーが発生しました: {e}")
 
