@@ -68,7 +68,7 @@ st.markdown("""
     .dnf-card {
         background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
         padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
-        align-items: center; color: #664d03; font-weight: bold; font-size: 1.8rem;
+        align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
         width: 100%; box-sizing: border-box;
     }
 </style>
@@ -184,9 +184,14 @@ except Exception:
 settings_dict = {k: v for k, v in zip(df['Key'], df['Value']) if k != ""}
 finish_enabled = str(settings_dict.get('finish_enabled', 'False')).strip().lower() == 'true'
 
-start_time_str = str(settings_dict.get('start_time', ''))
+# ★ スタート時刻の読み込みを強固に（先頭の ' がある場合は除去）
+start_time_str = str(settings_dict.get('start_time', '')).lstrip("'").strip()
 if start_time_str and start_time_str.lower() != 'nan':
-    start_time_val = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+    try:
+        # 秒以下のゴミがあっても安全にパースできるよう [:19] でカット
+        start_time_val = datetime.datetime.strptime(start_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+    except Exception:
+        start_time_val = None
 else:
     start_time_val = None
 
@@ -293,7 +298,7 @@ with tab1:
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
-        st.caption("【スタート前_チェック済・棄権確定一覧】")
+        st.caption("【スタート前_チェック済・棄権一覧】")
         
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
@@ -397,6 +402,7 @@ with tab2:
                     no_str = f"{t_no:03d}"
                     if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary", use_container_width=True):
                         try:
+                            # ★ ゴール時刻をスプレッドシートへ記録する際、Googleの自動変換を防ぐために先頭に ' を付与
                             now_str = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
                             update_finish_cells(t_no, True, f"'{now_str}")
                             st.session_state.local_updates[f"finish_{t_no}"] = True
@@ -410,32 +416,47 @@ with tab2:
             if filter_finish == "すべて":
                 st.markdown("---")
             st.caption("【ゴール済み一覧】")
+            
             for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
+                # ★ セルに記録されている文字から ' を確実に除去して扱う
                 f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
                 net_jp = ""
                 time_jp = ""
+                
                 if f_time_str and f_time_str != "nan":
                     try:
-                        if len(f_time_str) > 10:
-                            f_datetime = datetime.datetime.strptime(f_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
-                            time_jp = f"{f_datetime.hour}時{f_datetime.minute:02d}分{f_datetime.second:02d}秒"
+                        # 過去のデータ(HH:MM:SS)と新しいデータ(YYYY-MM-DD HH:MM:SS)を両方パース可能に
+                        if len(f_time_str) >= 19:
+                            f_datetime = datetime.datetime.strptime(f_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
                         else:
                             f_parts = [int(p) for p in f_time_str.split(':')]
-                            time_jp = f"{f_parts[0]}時{f_parts[1]:02d}分{f_parts[2]:02d}秒"
+                            time_obj = datetime.time(f_parts[0], f_parts[1], f_parts[2])
                             if start_time_val:
-                                f_time_obj = datetime.datetime.strptime(f_time_str, '%H:%M:%S').time()
-                                f_datetime = datetime.datetime.combine(start_time_val.date(), f_time_obj, tzinfo=JST)
+                                f_datetime = datetime.datetime.combine(start_time_val.date(), time_obj, tzinfo=JST)
+                            else:
+                                f_datetime = datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
+                        
+                        time_jp = f_datetime.strftime('%H:%M:%S')
                         
                         if start_time_val:
+                            # ★ 安全な時刻計算処理
                             net_seconds = int((f_datetime - start_time_val).total_seconds())
-                            h = net_seconds // 3600
-                            m = (net_seconds % 3600) // 60
-                            s = net_seconds % 60
-                            net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
+                            if net_seconds < 0:
+                                # 万が一、スタート設定より前にゴールした時のエラーバグ防止
+                                abs_s = abs(net_seconds)
+                                h = abs_s // 3600
+                                m = (abs_s % 3600) // 60
+                                s = abs_s % 60
+                                net_jp = f"-(マイナス){h}時間{m:02d}分{s:02d}秒" if h > 0 else f"-(マイナス){m:02d}分{s:02d}秒"
+                            else:
+                                h = net_seconds // 3600
+                                m = (net_seconds % 3600) // 60
+                                s = net_seconds % 60
+                                net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
                     except Exception:
-                        pass
+                        time_jp = "時刻エラー"
                 
                 time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
                 
@@ -480,14 +501,14 @@ with tab2:
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
-            st.caption("【途中棄権(DNF)確定一覧】")
+            st.caption("【途中棄権(DNF)一覧】")
             for _, row in dnf_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 if is_admin:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
-                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (棄権)</span></div>", unsafe_allow_html=True)
+                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
                     if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
@@ -498,7 +519,7 @@ with tab2:
                         except Exception as e: st.error(f"エラー: {e}")
                     st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
 
 # --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
 with tab3:
@@ -540,8 +561,9 @@ with tab3:
         st.markdown("#### ⏱️ スタート時刻設定")
         if st.button("現在時刻(JST)をスタートに設定"):
             try:
+                # ★ スタート時刻を記録する際も、Googleの自動変換を防ぐために先頭に ' を付与
                 new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-                update_setting_cell('start_time', new_time)
+                update_setting_cell('start_time', f"'{new_time}")
                 time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
@@ -556,7 +578,8 @@ with tab3:
             try:
                 today_date = start_time_val.date() if start_time_val else datetime.datetime.now(JST).date()
                 new_manual_datetime = datetime.datetime.combine(today_date, manual_time, tzinfo=JST)
-                update_setting_cell('start_time', new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S'))
+                # ★ 手動設定時も ' を付与して記録
+                update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
                 time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
@@ -565,6 +588,6 @@ with tab3:
 
         st.markdown("---")
         if start_time_val:
-            st.info(f"スタート時刻設定:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
         else:
-            st.info("スタート時刻設定:\n未設定")
+            st.info("設定済:\n未設定")
