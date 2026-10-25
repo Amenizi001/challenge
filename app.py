@@ -438,7 +438,8 @@ with tab2:
                             else:
                                 f_datetime = datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
                         
-                        time_jp = f_datetime.strftime('%H:%M:%S')
+                        # ★ ご要望のフォーマット「YYYY-MM-DD HH:MM:SS」に変更
+                        time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
                         
                         if start_time_val:
                             # ★ 安全な時刻計算処理
