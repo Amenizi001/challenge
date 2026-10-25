@@ -13,13 +13,16 @@ JST = ZoneInfo("Asia/Tokyo")
 st.markdown("""
 <style>
     /* ---------------------------------------------------
-       ★ 3列グリッド（幅約33%）の中にあるボタンだけを特大サイズにする
+       ★ 3列グリッド（st.columns(3)）の中にあるボタンだけを狙って「特大（35px）」にする
+       （古いブラウザやSafariでも確実に動く、CSSの子要素カウント機能を使用）
     ---------------------------------------------------- */
-    div[data-testid="column"][style*="33."] div.stButton > button {
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton > button,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton > button {
         padding: 15px 20px !important; 
         height: auto !important; 
     }
-    div[data-testid="column"][style*="33."] div.stButton > button p {
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton > button p,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton > button p {
         font-size: 35px !important; 
         font-weight: bold !important; 
         margin: 0 !important;
@@ -394,9 +397,7 @@ with tab2:
                     no_str = f"{t_no:03d}"
                     if cols[idx].button(f"{no_str}:ゴール", key=f"finish_btn_{t_no}", type="primary", use_container_width=True):
                         try:
-                            # ★ YYYY-MM-DD HH:MM:SS フォーマットに変更
                             now_str = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-                            # ★ 先頭に「'」をつけてスプレッドシートの勝手な時刻変換をブロック
                             update_finish_cells(t_no, True, f"'{now_str}")
                             st.session_state.local_updates[f"finish_{t_no}"] = True
                             st.session_state.local_updates[f"time_{t_no}"] = f"'{now_str}"
@@ -412,18 +413,15 @@ with tab2:
             for _, row in finished_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                # ★ 先頭の「'」を剥がして処理する
                 f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
                 net_jp = ""
                 time_jp = ""
                 if f_time_str and f_time_str != "nan":
                     try:
-                        # ★ 新フォーマット (YYYY-MM-DD HH:MM:SS) への対応
                         if len(f_time_str) > 10:
                             f_datetime = datetime.datetime.strptime(f_time_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
                             time_jp = f"{f_datetime.hour}時{f_datetime.minute:02d}分{f_datetime.second:02d}秒"
                         else:
-                            # 過去のフォーマット (HH:MM:SS) との互換性
                             f_parts = [int(p) for p in f_time_str.split(':')]
                             time_jp = f"{f_parts[0]}時{f_parts[1]:02d}分{f_parts[2]:02d}秒"
                             if start_time_val:
@@ -542,7 +540,6 @@ with tab3:
         st.markdown("#### ⏱️ スタート時刻設定")
         if st.button("現在時刻(JST)をスタートに設定"):
             try:
-                # ★ スタート時刻も日本時間で記録
                 new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
                 update_setting_cell('start_time', new_time)
                 time.sleep(2.0)
