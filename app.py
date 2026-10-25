@@ -427,4 +427,157 @@ with tab2:
                         
                         time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
                         
-                        if start_t
+                        if start_time_val:
+                            net_seconds = int((f_datetime - start_time_val).total_seconds())
+                            if net_seconds < 0:
+                                abs_s = abs(net_seconds)
+                                h = abs_s // 3600
+                                m = (abs_s % 3600) // 60
+                                s = abs_s % 60
+                                net_jp = f"-(マイナス){h}時間{m:02d}分{s:02d}秒" if h > 0 else f"-(マイナス){m:02d}分{s:02d}秒"
+                            else:
+                                h = net_seconds // 3600
+                                m = (net_seconds % 3600) // 60
+                                s = net_seconds % 60
+                                net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
+                    except Exception:
+                        time_jp = "時刻エラー"
+                
+                time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
+                
+                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
+
+                if is_admin:
+                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
+                    col_card, col_btn = st.columns([3, 1])
+                    col_card.markdown(card_html, unsafe_allow_html=True)
+                    if col_btn.button("❌ 取消", key=f"finish_cancel_{t_no}", type="secondary"):
+                        try:
+                            update_finish_cells(t_no, False, "")
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"エラー: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(card_html, unsafe_allow_html=True)
+
+        if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
+            st.markdown("---")
+            st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
+            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
+            grid_cols = 3
+            for i in range(0, len(unfinish_df), grid_cols):
+                cols = st.columns(grid_cols)
+                batch = unfinish_df.iloc[i:i+grid_cols]
+                for idx, (_, row) in enumerate(batch.iterrows()):
+                    t_no = int(row['No'])
+                    no_str = f"{t_no:03d}"
+                    if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_btn_{t_no}", type="secondary", use_container_width=True):
+                        try:
+                            update_dnf_cells(t_no, True, True, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = True
+                            st.session_state.local_updates[f"finish_{t_no}"] = True
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"エラー: {e}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
+        if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
+            st.markdown("---")
+            st.caption("【途中棄権(DNF)確定一覧】")
+            for _, row in dnf_df.iterrows():
+                t_no = int(row['No'])
+                no_str = f"{t_no:03d}"
+                if is_admin:
+                    st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
+                    col_card, col_btn = st.columns([3, 1])
+                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+                    if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
+                        try:
+                            update_dnf_cells(t_no, False, False, "")
+                            st.session_state.local_updates[f"dnf_{t_no}"] = False
+                            st.session_state.local_updates[f"finish_{t_no}"] = False
+                            st.session_state.local_updates[f"time_{t_no}"] = ""
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"エラー: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+
+# --- タブ3：管理者メニュー ---
+with tab3:
+    st.markdown("<h4 style='margin:0; padding:2px 0;'>⚙️ 管理者メニュー</h4>", unsafe_allow_html=True)
+    
+    if not st.session_state.is_admin:
+        admin_input = st.text_input("管理者パスワードを入力", type="password")
+        if st.button("ログイン"):
+            if admin_input == st.secrets["admin_password"]:
+                st.session_state.is_admin = True
+                st.rerun()
+            else:
+                st.error("パスワードが正しくありません")
+    else:
+        st.success("管理者認証成功")
+        if st.button("🚪 管理者メニューから抜ける"):
+            st.session_state.is_admin = False
+            st.rerun()
+        
+        st.markdown("#### 🏁 ゴールチェック設定")
+        if finish_enabled:
+            st.success("状態: 🔓 一般開放中")
+            btn_label = "🔒 ゴールチェックをロックする"
+            new_status = False
+        else:
+            st.warning("状態: 🔒 ロック中")
+            btn_label = "🔓 ゴールチェックを一般開放する"
+            new_status = True
+            
+        if st.button(btn_label):
+            try:
+                update_setting_cell('finish_enabled', new_status)
+                time.sleep(2.0)
+                load_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+        
+        st.markdown("#### ⏱️ スタート時刻設定")
+        if st.button("現在時刻(JST)をスタートに設定"):
+            try:
+                new_time = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+                update_setting_cell('start_time', f"'{new_time}")
+                time.sleep(2.0)
+                load_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+        
+        st.markdown("---")
+        default_datetime_str = start_time_val.strftime('%Y%m%d%H%M%S') if start_time_val else datetime.datetime.now(JST).strftime('%Y%m%d%H%M%S')
+        manual_datetime_str = st.text_input("手動設定 (YYYYMMDDHHMMSS形式)", value=default_datetime_str, max_chars=14)
+        
+        if st.button("手動入力した時刻をセット"):
+            try:
+                if len(manual_datetime_str) != 14 or not manual_datetime_str.isdigit():
+                    st.error("⚠️ 14桁の半角数字（例: 20241025093000）で入力してください。")
+                else:
+                    new_manual_datetime = datetime.datetime.strptime(manual_datetime_str, '%Y%m%d%H%M%S').replace(tzinfo=JST)
+                    update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+                    time.sleep(2.0)
+                    load_data.clear()
+                    st.rerun()
+            except ValueError:
+                st.error("⚠️ 正しい日時（存在する年月日・時刻）を入力してください。")
+            except Exception as e:
+                st.error(f"更新エラーが発生しました: {e}")
+
+        st.markdown("---")
+        if start_time_val:
+            st.info(f"スタート時刻:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+        else:
+            st.info("スタート時刻:\n未設定")
