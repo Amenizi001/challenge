@@ -68,7 +68,7 @@ st.markdown("""
     .dnf-card {
         background-color: #fff3cd; border: 1px solid #ffe69c; border-radius: 6px;
         padding: 10px 8px; margin-bottom: 6px; display: flex; justify-content: space-between;
-        align-items: center; color: #664d03; font-weight: bold; font-size: 1.15rem;
+        align-items: center; color: #664d03; font-weight: bold; font-size: 1.8rem;
         width: 100%; box-sizing: border-box;
     }
 </style>
@@ -565,6 +565,6 @@ with tab3:
 
         st.markdown("---")
         if start_time_val:
-            st.info(f"設定済:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
+            st.info(f"スタート時刻設定:\n{start_time_val.strftime('%Y/%m/%d %H:%M:%S')}")
         else:
-            st.info("設定済:\n未設定")
+            st.info("スタート時刻設定:\n未設定")
