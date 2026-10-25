@@ -293,7 +293,7 @@ with tab1:
     if not done_df.empty and filter_start in ["すべて", "チェック済", "DNS(棄権)"]:
         if filter_start == "すべて":
             st.markdown("---")
-        st.caption("【スタート前_チェック済・棄権一覧】")
+        st.caption("【スタート前_チェック済・棄権確定一覧】")
         
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
@@ -480,14 +480,14 @@ with tab2:
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
-            st.caption("【途中棄権(DNF)一覧】")
+            st.caption("【途中棄権(DNF)確定一覧】")
             for _, row in dnf_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
                 if is_admin:
                     st.markdown('<div class="admin-card-box">', unsafe_allow_html=True)
                     col_card, col_btn = st.columns([3, 1])
-                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                    col_card.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (棄権)</span></div>", unsafe_allow_html=True)
                     if col_btn.button("↩️ 取消", key=f"undnf_cancel_{t_no}", type="secondary"):
                         try:
                             update_dnf_cells(t_no, False, False, "")
@@ -498,7 +498,7 @@ with tab2:
                         except Exception as e: st.error(f"エラー: {e}")
                     st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF (途中棄権)</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
 
 # --- タブ3：管理者メニュー（サイドバーを廃止してタブ化） ---
 with tab3:
