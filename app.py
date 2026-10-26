@@ -84,11 +84,11 @@ if not check_password(): st.stop()
 if "local_updates" not in st.session_state: st.session_state.local_updates = {}
 if "last_valid_df" not in st.session_state: st.session_state.last_valid_df = None
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_global_sync_manager(): return {"last_read_time": 0.0}
 global_sync = get_global_sync_manager()
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_gspread_client():
     creds_dict = dict(st.secrets.connections.gsheets)
     url = creds_dict.pop("spreadsheet", None)
@@ -137,7 +137,7 @@ def update_setting_cell(key: str, value: str):
         ws.update_cell(next_row, val_col_idx, str(value))
     return True
 
-@st.cache_data(ttl=15)
+@st.cache_data(ttl=15, show_spinner=False)
 def load_data():
     ws = get_worksheet()
     data = ws.get_all_values() 
@@ -246,7 +246,7 @@ with tab1:
 
     # 総合一覧（スタート）
     if not view_df.empty:
-        st.caption("【スタート一覧】")
+        st.caption("【スタートチェック】")
         st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(view_df), grid_cols):
@@ -278,7 +278,7 @@ with tab1:
 
         uncheck_df = view_df[(~view_df['Start_Check']) & (~view_df['DNS'])]
         if not uncheck_df.empty:
-            st.caption("【出走前棄権(DNS)登録】")
+            st.caption("【出走前棄権(DNS)登録】タップして棄権登録")
             st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(uncheck_df), grid_cols):
@@ -298,7 +298,7 @@ with tab1:
 
         done_df = view_df[view_df['Start_Check'] | view_df['DNS']]
         if not done_df.empty:
-            st.caption("【状態リセット (スタート/DNS取消)】")
+            st.caption("【状態リセット (スタート/DNS取消)】タップしてリセット")
             st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(done_df), grid_cols):
@@ -311,7 +311,7 @@ with tab1:
                     is_dns = row['DNS']
 
                     if is_dns:
-                        if cols[idx].button(f"↩️ {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
+                        if cols[idx].button(f" {no_str}:取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_dns_cells(t_no, False)
                                 st.session_state.local_updates[f"dns_{t_no}"] = False
@@ -319,7 +319,7 @@ with tab1:
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
                     elif is_start:
-                        if cols[idx].button(f"❌ {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
+                        if cols[idx].button(f" {no_str}:取消", key=f"start_cancel_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_start_cell(t_no, False)
                                 st.session_state.local_updates[f"start_{t_no}"] = False
@@ -384,7 +384,7 @@ with tab2:
 
         # 総合一覧（ゴール）- タイムなしのグリッド表示
         if not view_df2.empty:
-            st.caption("【ゴール一覧】")
+            st.caption("【ゴールチェック】")
             st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(view_df2), grid_cols):
@@ -412,61 +412,57 @@ with tab2:
             st.markdown('</div>', unsafe_allow_html=True)
 
         # 詳細一覧（ゴール済み・DNF） - タイム等を表示するカード（管理者の取消ボタンはここから除外）
-        finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])]
-        if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
+        done_list_df = view_df2[view_df2['Finish_Check'] | view_df2['DNF']]
+        if not done_list_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
             st.markdown("---")
-            st.caption("【ゴール済み詳細一覧】")
+            st.caption("【ゴール済み・DNF詳細一覧】")
             
-            for _, row in finished_df.iterrows():
+            for _, row in done_list_df.iterrows():
                 t_no = int(row['No'])
                 no_str = f"{t_no:03d}"
-                f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
-                net_jp = ""
-                time_jp = ""
-                
-                if f_time_str and f_time_str != "nan":
-                    try:
-                        if len(f_time_str) >= 19:
-                            f_datetime = datetime.datetime.strptime(f_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
-                        else:
-                            f_parts = [int(p) for p in f_time_str.split(':')]
-                            time_obj = datetime.time(f_parts[0], f_parts[1], f_parts[2])
-                            if start_time_val:
-                                f_datetime = datetime.datetime.combine(start_time_val.date(), time_obj, tzinfo=JST)
-                            else:
-                                f_datetime = datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
-                        
-                        time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
-                        
-                        if start_time_val:
-                            net_seconds = int((f_datetime - start_time_val).total_seconds())
-                            if net_seconds < 0:
-                                abs_s = abs(net_seconds)
-                                h = abs_s // 3600
-                                m = (abs_s % 3600) // 60
-                                s = abs_s % 60
-                                net_jp = f"-(マイナス){h}時間{m:02d}分{s:02d}秒" if h > 0 else f"-(マイナス){m:02d}分{s:02d}秒"
-                            else:
-                                h = net_seconds // 3600
-                                m = (net_seconds % 3600) // 60
-                                s = net_seconds % 60
-                                net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
-                    except Exception:
-                        time_jp = "時刻エラー"
-                
-                time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
-                card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
-                
-                st.markdown(card_html, unsafe_allow_html=True)
+                is_dnf = row['DNF']
 
-        dnf_df = view_df2[view_df2['DNF']]
-        if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
-            st.markdown("---")
-            st.caption("【途中棄権(DNF)確定一覧】")
-            for _, row in dnf_df.iterrows():
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+                if is_dnf:
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+                else:
+                    f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
+                    net_jp = ""
+                    time_jp = ""
+                    
+                    if f_time_str and f_time_str != "nan":
+                        try:
+                            if len(f_time_str) >= 19:
+                                f_datetime = datetime.datetime.strptime(f_time_str[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+                            else:
+                                f_parts = [int(p) for p in f_time_str.split(':')]
+                                time_obj = datetime.time(f_parts[0], f_parts[1], f_parts[2])
+                                if start_time_val:
+                                    f_datetime = datetime.datetime.combine(start_time_val.date(), time_obj, tzinfo=JST)
+                                else:
+                                    f_datetime = datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
+                            
+                            time_jp = f_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            if start_time_val:
+                                net_seconds = int((f_datetime - start_time_val).total_seconds())
+                                if net_seconds < 0:
+                                    abs_s = abs(net_seconds)
+                                    h = abs_s // 3600
+                                    m = (abs_s % 3600) // 60
+                                    s = abs_s % 60
+                                    net_jp = f"-(マイナス){h}時間{m:02d}分{s:02d}秒" if h > 0 else f"-(マイナス){m:02d}分{s:02d}秒"
+                                else:
+                                    h = net_seconds // 3600
+                                    m = (net_seconds % 3600) // 60
+                                    s = net_seconds % 60
+                                    net_jp = f"{h}時間{m:02d}分{s:02d}秒" if h > 0 else f"{m:02d}分{s:02d}秒"
+                        except Exception:
+                            time_jp = "時刻エラー"
+                    
+                    time_info = f"<div style='text-align: right; line-height: 1.4;'><span class='finish-time'>タイム: {net_jp}</span><br><span class='finish-clock'>(着 {time_jp})</span></div>" if net_jp else f"<div style='text-align: right;'><span class='finish-clock'>着 {time_jp}</span></div>"
+                    card_html = f"<div class='finish-card'><span class='finish-no'>No.{no_str}</span>{time_info}</div>"
+                    
+                    st.markdown(card_html, unsafe_allow_html=True)
 
         # 管理者用リセット・DNF登録（ゴールタブ）
         if is_admin:
@@ -475,7 +471,7 @@ with tab2:
             
             unfinish_df = view_df2[(~view_df2['Finish_Check']) & (~view_df2['DNF'])]
             if not unfinish_df.empty:
-                st.caption("【途中棄権(DNF)登録】")
+                st.caption("【途中棄権(DNF)登録】タップして棄権登録")
                 st.markdown('<div class="grid-box">', unsafe_allow_html=True)
                 grid_cols = 3
                 for i in range(0, len(unfinish_df), grid_cols):
@@ -484,7 +480,7 @@ with tab2:
                     for idx, (_, row) in enumerate(batch.iterrows()):
                         t_no = int(row['No'])
                         no_str = f"{t_no:03d}"
-                        if cols[idx].button(f"⚠️ {no_str}:棄権", key=f"dnf_reg_btn_{t_no}", type="secondary", use_container_width=True):
+                        if cols[idx].button(f" {no_str}:棄権", key=f"dnf_reg_btn_{t_no}", type="secondary", use_container_width=True):
                             try:
                                 update_dnf_cells(t_no, True, True, "")
                                 st.session_state.local_updates[f"dnf_{t_no}"] = True
@@ -509,7 +505,7 @@ with tab2:
                         is_dnf = row['DNF']
 
                         if is_dnf:
-                            if cols[idx].button(f"↩️ {no_str}:取消", key=f"dnf_cancel_{t_no}", type="secondary", use_container_width=True):
+                            if cols[idx].button(f" {no_str}:取消", key=f"dnf_cancel_{t_no}", type="secondary", use_container_width=True):
                                 try:
                                     update_dnf_cells(t_no, False, False, "")
                                     st.session_state.local_updates[f"dnf_{t_no}"] = False
@@ -518,7 +514,7 @@ with tab2:
                                     st.rerun()
                                 except Exception as e: st.error(f"エラー: {e}")
                         elif is_fin:
-                            if cols[idx].button(f"❌ {no_str}:取消", key=f"finish_cancel_{t_no}", type="secondary", use_container_width=True):
+                            if cols[idx].button(f" {no_str}:取消", key=f"finish_cancel_{t_no}", type="secondary", use_container_width=True):
                                 try:
                                     update_finish_cells(t_no, False, "")
                                     st.session_state.local_updates[f"finish_{t_no}"] = False
