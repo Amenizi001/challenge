@@ -423,7 +423,7 @@ with tab2:
                 is_dnf = row['DNF']
 
                 if is_dnf:
-                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF確定</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='dnf-card'><span>No.{no_str}</span><span>DNF</span></div>", unsafe_allow_html=True)
                 else:
                     f_time_str = str(row['Finish_Check_Time']).lstrip("'").strip()
                     net_jp = ""
