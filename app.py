@@ -12,24 +12,93 @@ JST = ZoneInfo("Asia/Tokyo")
 # --- UI最適化CSS ---
 st.markdown("""
 <style>
-    /* ---------------------------------------------------
-       ★ 3列グリッド（st.columns(3)）の中にあるボタンだけを狙って「特大（35px）」にする
-    ---------------------------------------------------- */
+    /* ===================================================
+       ★ 3列グリッド内のボタンを「左右密着（横並び）」にする設定
+    ==================================================== */
+    
+    /* 1. カラムの中身を縦並びから横並び（row）に変更 */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3),
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
+        gap: 0 !important; /* ボタン間の隙間をゼロにして密着させる */
+    }
+
+    /* 2. Streamlit内部の要素ラッパーをflexに対応させる */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container {
+        display: flex !important;
+    }
+
+    /* 3. 幅の比率設定（左のメインボタン：70%、右の取消ボタン：30%） */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(1),
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(1) {
+        flex: 1 1 70% !important;
+        width: 70% !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(2),
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(2) {
+        flex: 1 1 30% !important;
+        width: 30% !important;
+    }
+
+    /* 4. 一般モードなどでボタンが1つしかない場合は100%幅にする */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:first-child:last-child,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:first-child:last-child {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+    }
+
+    /* 5. ボタンそのもののサイズをコンテナにフィットさせる */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton,
     div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton > button,
     div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton > button {
-        padding: 15px 20px !important; 
-        height: auto !important; 
-    }
-    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) div.stButton > button p,
-    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div div.stButton > button p {
-        font-size: 35px !important; 
-        font-weight: bold !important; 
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 60px !important;
         margin: 0 !important;
+        padding: 0 !important;
     }
-    
-    /* ---------------------------------------------------
+
+    /* 6. 左ボタン（状態・メイン）のデザイン：右側の角丸をなくす */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(1):not(:last-child) div.stButton > button,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(1):not(:last-child) div.stButton > button {
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        border-right: 1px solid #ddd !important; /* 中央の仕切り線 */
+    }
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(1) div.stButton > button p,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(1) div.stButton > button p {
+        font-size: 28px !important; 
+        font-weight: bold !important; 
+    }
+
+    /* 7. 右ボタン（取消・棄権）のデザイン：左側の角丸をなくす */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(2) div.stButton > button,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(2) div.stButton > button {
+        border-top-left-radius: 0 !important;
+        border-bottom-left-radius: 0 !important;
+        border-left: none !important; /* 重なる線を消す */
+        background-color: #fffafa !important; /* ほんのり赤色 */
+    }
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:nth-child(2) div.stButton > button p,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:nth-child(2) div.stButton > button p {
+        font-size: 15px !important; 
+        font-weight: bold !important; 
+        color: #d9534f !important;
+    }
+
+    /* 8. ボタンが1つの時の角丸を維持 */
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) > div.element-container:first-child:last-child div.stButton > button,
+    div[data-testid="stHorizontalBlock"] > div:first-child:nth-last-child(3) ~ div > div.element-container:first-child:last-child div.stButton > button {
+        border-radius: 8px !important;
+    }
+
+    /* ===================================================
        レイアウト調整用設定
-    ---------------------------------------------------- */
+    ==================================================== */
     .title-box div[data-testid="stHorizontalBlock"] {
         display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
     }
@@ -39,13 +108,6 @@ st.markdown("""
     .title-box div[data-testid="column"]:nth-child(2) {
         width: 30% !important; flex: 1 1 30% !important; min-width: 30% !important;
         text-align: right;
-    }
-    .grid-box div[data-testid="stHorizontalBlock"] {
-        display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 6px !important;
-    }
-    .grid-box div[data-testid="column"] {
-        width: calc(33.333% - 4px) !important; flex: 1 1 calc(33.333% - 4px) !important;
-        min-width: calc(33.333% - 4px) !important; max-width: calc(33.333% - 4px) !important;
     }
     .admin-card-box div[data-testid="stHorizontalBlock"] {
         display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important;
@@ -253,10 +315,8 @@ with tab1:
 
     view_df = view_df.sort_values(by="No")
 
-    # ----- 変更部分：すべてのステータスを1つのグリッドで番号順に表示（レイアウト崩れ対策版） -----
     if not view_df.empty:
         st.caption(f"【{filter_start}一覧】")
-        st.markdown('<div class="grid-box">', unsafe_allow_html=True)
         grid_cols = 3
         for i in range(0, len(view_df), grid_cols):
             cols = st.columns(grid_cols)
@@ -268,7 +328,7 @@ with tab1:
                 is_dns = row['DNS']
 
                 if is_admin:
-                    # 管理者の場合は「状態表示(無効ボタン)」＋「アクション」の2段構成に統一し、高さを完璧に揃える
+                    # 管理者モード：CSSの効果で、ここにある2つのボタンが左右ピタッとくっつきます
                     if is_dns:
                         cols[idx].button(f"{no_str}:DNS", key=f"disp_dns_{t_no}", disabled=True, use_container_width=True)
                         if cols[idx].button(f"↩️ 取消", key=f"dns_cancel_{t_no}", type="secondary", use_container_width=True):
@@ -305,7 +365,7 @@ with tab1:
                             except Exception as e:
                                 st.error(f"エラー: {e}")
                 else:
-                    # 一般ユーザーの場合は常に1段構成
+                    # 一般ユーザー用（ボタン1つ）
                     if is_dns:
                         cols[idx].button(f"{no_str}:DNS", key=f"dns_done_{t_no}", disabled=True, use_container_width=True)
                     elif is_start:
@@ -319,7 +379,6 @@ with tab1:
                             except Exception as e:
                                 st.error(f"エラー: {e}")
 
-        st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("該当する番号はありません。")
 
@@ -367,7 +426,7 @@ with tab2:
             view_df2 = started_df[started_df['Finish_Check'] | started_df['DNF']]
         else:
             view_df2 = started_df
-            
+
         if not df.empty:
             max_no2 = int(df['No'].max())
             range_options2 = ["すべて"] + [f"{i}～{i+9}" for i in range(1, max_no2 + 1, 10)]
@@ -381,7 +440,6 @@ with tab2:
         unfinish_df = view_df2[(~view_df2['Finish_Check']) & (~view_df2['DNF'])].sort_values(by="No")
         if not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.caption("【未ゴール】タップしてゴール完了")
-            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(unfinish_df), grid_cols):
                 cols = st.columns(grid_cols)
@@ -398,7 +456,6 @@ with tab2:
                             st.rerun()
                         except Exception as e:
                             st.error(f"エラー: {e}")
-            st.markdown('</div>', unsafe_allow_html=True)
 
         finished_df = view_df2[view_df2['Finish_Check'] & (~view_df2['DNF'])].sort_values(by="No")
         if not finished_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
@@ -466,7 +523,6 @@ with tab2:
         if is_admin and not unfinish_df.empty and filter_finish in ["すべて", "未ゴール"]:
             st.markdown("---")
             st.caption("【管理者用：途中棄権(DNF)登録】タップしてDNF登録")
-            st.markdown('<div class="grid-box">', unsafe_allow_html=True)
             grid_cols = 3
             for i in range(0, len(unfinish_df), grid_cols):
                 cols = st.columns(grid_cols)
@@ -483,7 +539,6 @@ with tab2:
                             st.rerun()
                         except Exception as e:
                             st.error(f"エラー: {e}")
-            st.markdown('</div>', unsafe_allow_html=True)
 
         dnf_df = view_df2[view_df2['DNF']].sort_values(by="No")
         if not dnf_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
