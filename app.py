@@ -201,7 +201,6 @@ def parse_time(time_str, start_time_val):
                 return datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
         except: return None
 
-
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
 # ==========================================
@@ -429,7 +428,6 @@ with tab2:
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
-
         # 詳細一覧（ゴール済み・DNF）
         done_list_df = view_df2[view_df2['Finish_Check'] | view_df2['DNF']]
         if not done_list_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
@@ -545,110 +543,137 @@ with tab2:
 # --- タブ3：同着・僅差 ---
 with tab3:
     st.markdown("<h4 style='margin:0; padding:2px 0;'>⏱️ 同着・僅差設定</h4>", unsafe_allow_html=True)
-    st.markdown("2つの番号を入力して時刻調整・ゴール処理を行います。")
+    st.markdown("対象番号1（基準とするゴール済みの番号）と、対象番号2（時刻を修正・入力する番号）を設定してください。")
     
+    # Session stateの初期化
+    if "close_base_no" not in st.session_state:
+        st.session_state.close_base_no = 0
+    if "close_target_no" not in st.session_state:
+        st.session_state.close_target_no = 0
+
+    def set_base_no(no):
+        st.session_state.close_base_no = no
+
+    def set_target_no(no):
+        st.session_state.close_target_no = no
+
+    # 最新状態を取得（タブ3用）
+    df_close = df.copy()
+    for idx_row, row in df_close.iterrows():
+        t_no = int(row['No'])
+        if f"start_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Start_Check'] = st.session_state.local_updates[f"start_{t_no}"]
+        if f"dns_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'DNS'] = st.session_state.local_updates[f"dns_{t_no}"]
+        if f"finish_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Finish_Check'] = st.session_state.local_updates[f"finish_{t_no}"]
+        if f"dnf_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'DNF'] = st.session_state.local_updates[f"dnf_{t_no}"]
+        if f"time_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Finish_Check_Time'] = st.session_state.local_updates[f"time_{t_no}"]
+
+    # 基準にできる番号：スタート済 かつ 棄権ではない かつ ゴール済
+    valid_base_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF'] & df_close['Finish_Check']]
+    # 対象にできる番号：スタート済 かつ 棄権ではない (ゴール済/未ゴール両方)
+    valid_target_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF']]
+
     c_col1, c_col2 = st.columns(2)
-    close_no1 = c_col1.number_input("対象番号 1", min_value=0, step=1, value=0, key="close_no1")
-    close_no2 = c_col2.number_input("対象番号 2", min_value=0, step=1, value=0, key="close_no2")
     
-    if close_no1 > 0 and close_no2 > 0:
-        if close_no1 == close_no2:
-            st.warning("⚠️ 異なる番号を入力してください。")
-        else:
-            # 最新状態を取得（対象となる2つの番号のみ更新反映）
-            df_close = df.copy()
-            for idx_row, row in df_close.iterrows():
+    with c_col1:
+        base_no = st.number_input("① 対象番号1 (基準とするゴール済み)", min_value=0, step=1, key="close_base_no")
+        st.caption("👇 ボックスから番号をタップして選択")
+        with st.container(height=250):
+            cols = st.columns(3)
+            for idx, (_, row) in enumerate(valid_base_df.iterrows()):
                 t_no = int(row['No'])
-                if t_no in (close_no1, close_no2):
-                    if f"start_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Start_Check'] = st.session_state.local_updates[f"start_{t_no}"]
-                    if f"dns_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'DNS'] = st.session_state.local_updates[f"dns_{t_no}"]
-                    if f"finish_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Finish_Check'] = st.session_state.local_updates[f"finish_{t_no}"]
-                    if f"dnf_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'DNF'] = st.session_state.local_updates[f"dnf_{t_no}"]
-                    if f"time_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Finish_Check_Time'] = st.session_state.local_updates[f"time_{t_no}"]
+                no_str = f"{t_no:03d}"
+                cols[idx % 3].button(no_str, key=f"base_btn_{t_no}", on_click=set_base_no, args=(t_no,), use_container_width=True)
 
-            row1 = df_close[df_close['No'] == close_no1]
-            row2 = df_close[df_close['No'] == close_no2]
-            
-            if row1.empty or row2.empty:
-                st.error("⚠️ 入力された番号が存在しません。本部に連絡して下さい。")
-            else:
-                row1 = row1.iloc[0]
-                row2 = row2.iloc[0]
+    with c_col2:
+        target_no = st.number_input("② 対象番号2 (修正する未・済の対象)", min_value=0, step=1, key="close_target_no")
+        st.caption("👇 ボックスから番号をタップして選択")
+        with st.container(height=250):
+            cols = st.columns(3)
+            for idx, (_, row) in enumerate(valid_target_df.iterrows()):
+                t_no = int(row['No'])
+                no_str = f"{t_no:03d}"
+                label = f"{no_str}(済)" if row['Finish_Check'] else f"{no_str}(未)"
+                cols[idx % 3].button(label, key=f"target_btn_{t_no}", on_click=set_target_no, args=(t_no,), use_container_width=True)
                 
-                if row1['DNS'] or row1['DNF'] or row2['DNS'] or row2['DNF']:
-                    st.error("⚠️ 棄権（DNS/DNF）の番号が含まれています。本部スタッフにて対応するため内容を本部に連絡して下さい。")
-                elif not row1['Start_Check'] or not row2['Start_Check']:
-                    st.error("⚠️ 未スタートの番号が含まれています。本部に連絡して下さい。")
-                else:
-                    is_fin1 = row1['Finish_Check']
-                    is_fin2 = row2['Finish_Check']
-                    
-                    def perform_time_update(target_no, new_dt, success_msg=""):
-                        new_time_str = f"'{new_dt.strftime('%Y-%m-%d %H:%M:%S')}"
-                        try:
-                            update_finish_cells(target_no, True, new_time_str)
-                            st.session_state.local_updates[f"finish_{target_no}"] = True
-                            st.session_state.local_updates[f"time_{target_no}"] = new_time_str
-                            st.success(success_msg)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"更新エラー: {e}")
-                    
-                    # 【パターン1】両方とも未ゴール
-                    if not is_fin1 and not is_fin2:
-                        st.info("💡 どちらか一方はゴール済の番号を選択（入力）して下さい。")
-                    
-                    # 【パターン2】両方ともゴール済
-                    elif is_fin1 and is_fin2:
-                        t1 = parse_time(row1['Finish_Check_Time'], start_time_val)
-                        t2 = parse_time(row2['Finish_Check_Time'], start_time_val)
-                        
-                        if t1 is None or t2 is None:
-                            st.error("⚠️ ゴール時刻データの取得に失敗しました。本部に連絡して下さい。")
-                        else:
-                            diff_sec = abs((t1 - t2).total_seconds())
-                            
-                            if diff_sec >= 10:
-                                st.error("⚠️ 2つともゴール済みでゴール時刻に10秒以上差がある場合は、本部スタッフにて対応するため内容を本部に連絡して下さい。")
-                            else:
-                                if t1 > t2:
-                                    late_no, late_time = close_no1, t1
-                                    base_no, base_time = close_no2, t2
-                                else:
-                                    late_no, late_time = close_no2, t2
-                                    base_no, base_time = close_no1, t1
-                                
-                                st.markdown(f"**No.{late_no}** の時刻を **No.{base_no}** の時刻（{base_time.strftime('%H:%M:%S')}）を基準に修正します。")
-                                
-                                if st.button(f"No.{late_no} を No.{base_no} より1秒早い", use_container_width=True):
-                                    perform_time_update(late_no, base_time - datetime.timedelta(seconds=1), f"No.{late_no} の時刻を修正しました。")
-                                if st.button(f"No.{late_no} を No.{base_no} と同時刻着", use_container_width=True):
-                                    perform_time_update(late_no, base_time, f"No.{late_no} の時刻を修正しました。")
-                                if st.button(f"No.{late_no} を No.{base_no} より1秒遅い", use_container_width=True):
-                                    perform_time_update(late_no, base_time + datetime.timedelta(seconds=1), f"No.{late_no} の時刻を修正しました。")
-                                if st.button(f"No.{late_no} を No.{base_no} より2秒遅い", use_container_width=True):
-                                    perform_time_update(late_no, base_time + datetime.timedelta(seconds=2), f"No.{late_no} の時刻を修正しました。")
-                                if st.button(f"No.{late_no} を No.{base_no} より3秒遅い", use_container_width=True):
-                                    perform_time_update(late_no, base_time + datetime.timedelta(seconds=3), f"No.{late_no} の時刻を修正しました。")
+    st.markdown("---")
 
-                    # 【パターン3】片方が未ゴール・片方がゴール済
-                    elif is_fin1 != is_fin2:
-                        unfin_no = close_no1 if not is_fin1 else close_no2
-                        fin_no = close_no2 if not is_fin1 else close_no1
-                        fin_time_raw = row2['Finish_Check_Time'] if not is_fin1 else row1['Finish_Check_Time']
+    if base_no > 0 and target_no > 0:
+        if base_no == target_no:
+            st.warning("⚠️ 異なる番号を選択してください。")
+        else:
+            base_row = df_close[df_close['No'] == base_no]
+            target_row = df_close[df_close['No'] == target_no]
+            
+            if base_row.empty or target_row.empty:
+                st.error("⚠️ 指定された番号のデータが見つかりません。")
+            else:
+                base_row = base_row.iloc[0]
+                target_row = target_row.iloc[0]
+                
+                # エラーチェック
+                if base_row['DNS'] or base_row['DNF'] or target_row['DNS'] or target_row['DNF']:
+                    st.error("⚠️ 棄権（DNS/DNF）の番号が含まれています。本部スタッフにて対応するため内容を本部に連絡して下さい。")
+                elif not base_row['Start_Check'] or not target_row['Start_Check']:
+                    st.error("⚠️ 未スタートの番号が含まれています。本部に連絡して下さい。")
+                elif not base_row['Finish_Check']:
+                    st.error("⚠️ **対象番号1（基準）には、必ず「ゴール済み」の番号を選択してください。**")
+                else:
+                    b_time_raw = base_row['Finish_Check_Time']
+                    b_time = parse_time(b_time_raw, start_time_val)
+                    
+                    if b_time is None:
+                        st.error("⚠️ 基準番号のゴール時刻データの取得に失敗しました。本部に連絡して下さい。")
+                    else:
+                        is_target_fin = target_row['Finish_Check']
+                        target_no_str = f"{target_no:03d}"
+                        base_no_str = f"{base_no:03d}"
                         
-                        base_time = parse_time(fin_time_raw, start_time_val)
-                        if base_time is None:
-                            st.error("⚠️ ゴール済番号の時刻データの取得に失敗しました。本部に連絡して下さい。")
-                        else:
-                            st.markdown(f"未ゴールの **No.{unfin_no}** を、ゴール済の **No.{fin_no}** の時刻（{base_time.strftime('%H:%M:%S')}）を基準にゴール処理します。")
+                        show_buttons = True
+                        
+                        if is_target_fin:
+                            t_time_raw = target_row['Finish_Check_Time']
+                            t_time = parse_time(t_time_raw, start_time_val)
+                            if t_time is not None:
+                                diff_sec = abs((b_time - t_time).total_seconds())
+                                if diff_sec >= 10:
+                                    st.error("⚠️ 両方ゴール済みでゴール時刻に10秒以上差がある場合は、本部スタッフにて対応するため内容を本部に連絡して下さい。")
+                                    show_buttons = False
+                        
+                        if show_buttons:
+                            def perform_time_update(target_no_val, new_dt, success_msg=""):
+                                new_time_str = f"'{new_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+                                try:
+                                    update_finish_cells(target_no_val, True, new_time_str)
+                                    st.session_state.local_updates[f"finish_{target_no_val}"] = True
+                                    st.session_state.local_updates[f"time_{target_no_val}"] = new_time_str
+                                    st.success(success_msg)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"更新エラー: {e}")
+                                    
+                            st.markdown(f"**{target_no_str}** の時刻を、**{base_no_str}** の時刻（**{b_time.strftime('%H:%M:%S')}**）を基準に修正します。")
                             
-                            if st.button(f"No.{unfin_no} を No.{fin_no} より1秒早い", use_container_width=True):
-                                perform_time_update(unfin_no, base_time - datetime.timedelta(seconds=1), f"No.{unfin_no} をゴール処理しました。")
-                            if st.button(f"No.{unfin_no} を No.{fin_no} と同時刻着", use_container_width=True):
-                                perform_time_update(unfin_no, base_time, f"No.{unfin_no} をゴール処理しました。")
-                            if st.button(f"No.{unfin_no} を No.{fin_no} より1秒遅い", use_container_width=True):
-                                perform_time_update(unfin_no, base_time + datetime.timedelta(seconds=1), f"No.{unfin_no} をゴール処理しました。")
+                            dt_minus_1 = b_time - datetime.timedelta(seconds=1)
+                            if st.button(f"{target_no_str} が {base_no_str} より 1秒早い ({dt_minus_1.strftime('%H:%M:%S')})", use_container_width=True):
+                                perform_time_update(target_no, dt_minus_1, f"No.{target_no_str} の時刻を修正しました。")
+                                
+                            dt_same = b_time
+                            if st.button(f"{target_no_str} が {base_no_str} と 同時刻着 ({dt_same.strftime('%H:%M:%S')})", use_container_width=True):
+                                perform_time_update(target_no, dt_same, f"No.{target_no_str} の時刻を修正しました。")
+                                
+                            dt_plus_1 = b_time + datetime.timedelta(seconds=1)
+                            if st.button(f"{target_no_str} が {base_no_str} より 1秒遅い ({dt_plus_1.strftime('%H:%M:%S')})", use_container_width=True):
+                                perform_time_update(target_no, dt_plus_1, f"No.{target_no_str} の時刻を修正しました。")
+                            
+                            # 両方ゴール済みの場合のみ 2秒・3秒遅い を表示
+                            if is_target_fin:
+                                dt_plus_2 = b_time + datetime.timedelta(seconds=2)
+                                if st.button(f"{target_no_str} が {base_no_str} より 2秒遅い ({dt_plus_2.strftime('%H:%M:%S')})", use_container_width=True):
+                                    perform_time_update(target_no, dt_plus_2, f"No.{target_no_str} の時刻を修正しました。")
+                                    
+                                dt_plus_3 = b_time + datetime.timedelta(seconds=3)
+                                if st.button(f"{target_no_str} が {base_no_str} より 3秒遅い ({dt_plus_3.strftime('%H:%M:%S')})", use_container_width=True):
+                                    perform_time_update(target_no, dt_plus_3, f"No.{target_no_str} の時刻を修正しました。")
 
 
 # --- タブ4：管理者メニュー ---
