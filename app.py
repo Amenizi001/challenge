@@ -576,11 +576,40 @@ with tab3:
     if "close_target_no" not in st.session_state:
         st.session_state.close_target_no = 0
 
+    # ===== コールバック関数の定義 =====
     def set_base_no(no):
         st.session_state.close_base_no = no
 
     def set_target_no(no):
         st.session_state.close_target_no = no
+        
+    def reset_base_no():
+        st.session_state.close_base_no = 0
+
+    def reset_target_no():
+        st.session_state.close_target_no = 0
+
+    def perform_time_update(target_no_val, new_dt, success_msg=""):
+        new_time_str = f"'{new_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+        try:
+            update_finish_cells(target_no_val, True, new_time_str)
+            st.session_state.local_updates[f"finish_{target_no_val}"] = True
+            st.session_state.local_updates[f"time_{target_no_val}"] = new_time_str
+            # 処理完了時に選択状態をリセット
+            st.session_state.close_base_no = 0
+            st.session_state.close_target_no = 0
+            # 結果メッセージを保持
+            st.session_state.action_msg = {"type": "success", "msg": success_msg}
+        except Exception as e:
+            st.session_state.action_msg = {"type": "error", "msg": f"更新エラー: {e}"}
+
+    # コールバックの結果メッセージを表示
+    if "action_msg" in st.session_state:
+        if st.session_state.action_msg["type"] == "success":
+            st.success(st.session_state.action_msg["msg"])
+        else:
+            st.error(st.session_state.action_msg["msg"])
+        del st.session_state.action_msg
 
     # 最新状態を取得（タブ3用）
     df_close = df.copy()
@@ -619,9 +648,9 @@ with tab3:
                 t_no = int(base_row.iloc[0]['No'])
                 time_jp, net_jp = get_time_display(base_row.iloc[0]['Finish_Check_Time'], start_time_val)
                 st.success(f"✅ 選択中: No.{t_no:03d}\n(着 {time_jp} / ﾀｲﾑ {net_jp})")
-            if st.button("🔄 選び直す (対象1)", key="reset_base"):
-                st.session_state.close_base_no = 0
-                st.rerun()
+            
+            # コールバックに変更
+            st.button("🔄 選び直す (対象1)", key="reset_base", on_click=reset_base_no)
 
     with c_col2:
         target_no = st.number_input("② 対象番号2 (修正する未・済の対象)", min_value=0, step=1, key="close_target_no")
@@ -649,9 +678,9 @@ with tab3:
                     st.success(f"✅ 選択中: No.{t_no:03d} (済)\n(着 {time_jp} / ﾀｲﾑ {net_jp})")
                 else:
                     st.success(f"✅ 選択中: No.{t_no:03d} (未ゴール)")
-            if st.button("🔄 選び直す (対象2)", key="reset_target"):
-                st.session_state.close_target_no = 0
-                st.rerun()
+            
+            # コールバックに変更
+            st.button("🔄 選び直す (対象2)", key="reset_target", on_click=reset_target_no)
                 
     st.markdown("---")
 
@@ -698,44 +727,30 @@ with tab3:
                                     show_buttons = False
                         
                         if show_buttons:
-                            def perform_time_update(target_no_val, new_dt, success_msg=""):
-                                new_time_str = f"'{new_dt.strftime('%Y-%m-%d %H:%M:%S')}"
-                                try:
-                                    update_finish_cells(target_no_val, True, new_time_str)
-                                    st.session_state.local_updates[f"finish_{target_no_val}"] = True
-                                    st.session_state.local_updates[f"time_{target_no_val}"] = new_time_str
-                                    # 処理完了時に選択状態をリセット
-                                    st.session_state.close_base_no = 0
-                                    st.session_state.close_target_no = 0
-                                    st.success(success_msg)
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"更新エラー: {e}")
-                                    
                             st.markdown(f"**{target_no_str}** の時刻を、**{base_no_str}** の時刻（**{b_time.strftime('%H:%M:%S')}**）を基準に修正します。")
                             
+                            # 全てコールバック (on_click) で実行するように修正
                             dt_minus_1 = b_time - datetime.timedelta(seconds=1)
-                            if st.button(f"{target_no_str} が {base_no_str} より 1秒早い ({dt_minus_1.strftime('%H:%M:%S')})", use_container_width=True):
-                                perform_time_update(target_no, dt_minus_1, f"No.{target_no_str} の時刻を修正しました。")
+                            st.button(f"{target_no_str} が {base_no_str} より 1秒早い ({dt_minus_1.strftime('%H:%M:%S')})", 
+                                      key="act_m1", use_container_width=True, on_click=perform_time_update, args=(target_no, dt_minus_1, f"No.{target_no_str} の時刻を修正しました。"))
                                 
                             dt_same = b_time
-                            if st.button(f"{target_no_str} が {base_no_str} と 同時刻着 ({dt_same.strftime('%H:%M:%S')})", use_container_width=True):
-                                perform_time_update(target_no, dt_same, f"No.{target_no_str} の時刻を修正しました。")
+                            st.button(f"{target_no_str} が {base_no_str} と 同時刻着 ({dt_same.strftime('%H:%M:%S')})", 
+                                      key="act_same", use_container_width=True, on_click=perform_time_update, args=(target_no, dt_same, f"No.{target_no_str} の時刻を修正しました。"))
                                 
                             dt_plus_1 = b_time + datetime.timedelta(seconds=1)
-                            if st.button(f"{target_no_str} が {base_no_str} より 1秒遅い ({dt_plus_1.strftime('%H:%M:%S')})", use_container_width=True):
-                                perform_time_update(target_no, dt_plus_1, f"No.{target_no_str} の時刻を修正しました。")
+                            st.button(f"{target_no_str} が {base_no_str} より 1秒遅い ({dt_plus_1.strftime('%H:%M:%S')})", 
+                                      key="act_p1", use_container_width=True, on_click=perform_time_update, args=(target_no, dt_plus_1, f"No.{target_no_str} の時刻を修正しました。"))
                             
                             # 両方ゴール済みの場合のみ 2秒・3秒遅い を表示
                             if is_target_fin:
                                 dt_plus_2 = b_time + datetime.timedelta(seconds=2)
-                                if st.button(f"{target_no_str} が {base_no_str} より 2秒遅い ({dt_plus_2.strftime('%H:%M:%S')})", use_container_width=True):
-                                    perform_time_update(target_no, dt_plus_2, f"No.{target_no_str} の時刻を修正しました。")
+                                st.button(f"{target_no_str} が {base_no_str} より 2秒遅い ({dt_plus_2.strftime('%H:%M:%S')})", 
+                                          key="act_p2", use_container_width=True, on_click=perform_time_update, args=(target_no, dt_plus_2, f"No.{target_no_str} の時刻を修正しました。"))
                                     
                                 dt_plus_3 = b_time + datetime.timedelta(seconds=3)
-                                if st.button(f"{target_no_str} が {base_no_str} より 3秒遅い ({dt_plus_3.strftime('%H:%M:%S')})", use_container_width=True):
-                                    perform_time_update(target_no, dt_plus_3, f"No.{target_no_str} の時刻を修正しました。")
-
+                                st.button(f"{target_no_str} が {base_no_str} より 3秒遅い ({dt_plus_3.strftime('%H:%M:%S')})", 
+                                          key="act_p3", use_container_width=True, on_click=perform_time_update, args=(target_no, dt_plus_3, f"No.{target_no_str} の時刻を修正しました。"))
 
 # --- タブ4：管理者メニュー ---
 with tab4:
