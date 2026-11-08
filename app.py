@@ -201,6 +201,30 @@ def parse_time(time_str, start_time_val):
                 return datetime.datetime.combine(datetime.datetime.now(JST).date(), time_obj, tzinfo=JST)
         except: return None
 
+def get_time_display(time_str, start_time_val):
+    """ 着時刻とタイムを整形して返す (着 hh:mm:ss, タイム mm:ss) """
+    if not time_str or str(time_str).lower() == "nan": return "", ""
+    dt = parse_time(time_str, start_time_val)
+    if dt is None: return "", ""
+    
+    time_jp = dt.strftime('%H:%M:%S')
+    net_jp = ""
+    if start_time_val:
+        net_seconds = int((dt - start_time_val).total_seconds())
+        if net_seconds < 0:
+            abs_s = abs(net_seconds)
+            h = abs_s // 3600
+            m = (abs_s % 3600) // 60
+            s = abs_s % 60
+            net_jp = f"-{h}:{m:02d}:{s:02d}" if h > 0 else f"-{m:02d}:{s:02d}"
+        else:
+            h = net_seconds // 3600
+            m = (net_seconds % 3600) // 60
+            s = net_seconds % 60
+            net_jp = f"{h}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
+    return time_jp, net_jp
+
+
 if api_limit_mode: st.warning("⚠️ API通信制限中のため、直前のデータを表示しています")
 
 # ==========================================
@@ -428,6 +452,7 @@ with tab2:
                                 st.rerun()
                             except Exception as e: st.error(f"エラー: {e}")
             st.markdown('</div>', unsafe_allow_html=True)
+
         # 詳細一覧（ゴール済み・DNF）
         done_list_df = view_df2[view_df2['Finish_Check'] | view_df2['DNF']]
         if not done_list_df.empty and filter_finish in ["すべて", "ゴール済 (DNF含)"]:
@@ -567,33 +592,66 @@ with tab3:
         if f"dnf_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'DNF'] = st.session_state.local_updates[f"dnf_{t_no}"]
         if f"time_{t_no}" in st.session_state.local_updates: df_close.at[idx_row, 'Finish_Check_Time'] = st.session_state.local_updates[f"time_{t_no}"]
 
-    # 基準にできる番号：スタート済 かつ 棄権ではない かつ ゴール済
-    valid_base_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF'] & df_close['Finish_Check']]
-    # 対象にできる番号：スタート済 かつ 棄権ではない (ゴール済/未ゴール両方)
-    valid_target_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF']]
+    # 基準にできる番号：スタート済 かつ 棄権ではない かつ ゴール済 (番号順にソート)
+    valid_base_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF'] & df_close['Finish_Check']].sort_values(by="No")
+    # 対象にできる番号：スタート済 かつ 棄権ではない (ゴール済/未ゴール両方) (番号順にソート)
+    valid_target_df = df_close[df_close['Start_Check'] & ~df_close['DNS'] & ~df_close['DNF']].sort_values(by="No")
 
     c_col1, c_col2 = st.columns(2)
     
     with c_col1:
         base_no = st.number_input("① 対象番号1 (基準とするゴール済み)", min_value=0, step=1, key="close_base_no")
-        st.caption("👇 ボックスから番号をタップして選択")
-        with st.container(height=250):
-            cols = st.columns(3)
-            for idx, (_, row) in enumerate(valid_base_df.iterrows()):
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                cols[idx % 3].button(no_str, key=f"base_btn_{t_no}", on_click=set_base_no, args=(t_no,), use_container_width=True)
+        if base_no == 0:
+            st.caption("👇 ボックスから番号をタップして選択")
+            with st.container(height=350):
+                for idx, (_, row) in enumerate(valid_base_df.iterrows()):
+                    t_no = int(row['No'])
+                    no_str = f"{t_no:03d}"
+                    time_jp, net_jp = get_time_display(row['Finish_Check_Time'], start_time_val)
+                    if time_jp:
+                        label = f"No.{no_str} (着 {time_jp} / ﾀｲﾑ {net_jp})"
+                    else:
+                        label = f"No.{no_str}"
+                    st.button(label, key=f"base_btn_{t_no}", on_click=set_base_no, args=(t_no,), use_container_width=True)
+        else:
+            base_row = valid_base_df[valid_base_df['No'] == base_no]
+            if not base_row.empty:
+                t_no = int(base_row.iloc[0]['No'])
+                time_jp, net_jp = get_time_display(base_row.iloc[0]['Finish_Check_Time'], start_time_val)
+                st.success(f"✅ 選択中: No.{t_no:03d}\n(着 {time_jp} / ﾀｲﾑ {net_jp})")
+            if st.button("🔄 選び直す (対象1)", key="reset_base"):
+                st.session_state.close_base_no = 0
+                st.rerun()
 
     with c_col2:
         target_no = st.number_input("② 対象番号2 (修正する未・済の対象)", min_value=0, step=1, key="close_target_no")
-        st.caption("👇 ボックスから番号をタップして選択")
-        with st.container(height=250):
-            cols = st.columns(3)
-            for idx, (_, row) in enumerate(valid_target_df.iterrows()):
-                t_no = int(row['No'])
-                no_str = f"{t_no:03d}"
-                label = f"{no_str}(済)" if row['Finish_Check'] else f"{no_str}(未)"
-                cols[idx % 3].button(label, key=f"target_btn_{t_no}", on_click=set_target_no, args=(t_no,), use_container_width=True)
+        if target_no == 0:
+            st.caption("👇 ボックスから番号をタップして選択")
+            with st.container(height=350):
+                for idx, (_, row) in enumerate(valid_target_df.iterrows()):
+                    t_no = int(row['No'])
+                    no_str = f"{t_no:03d}"
+                    if row['Finish_Check']:
+                        time_jp, net_jp = get_time_display(row['Finish_Check_Time'], start_time_val)
+                        if time_jp:
+                            label = f"No.{no_str}(済) 着{time_jp}/ﾀｲﾑ{net_jp}"
+                        else:
+                            label = f"No.{no_str}(済)"
+                    else:
+                        label = f"No.{no_str}(未)"
+                    st.button(label, key=f"target_btn_{t_no}", on_click=set_target_no, args=(t_no,), use_container_width=True)
+        else:
+            target_row = valid_target_df[valid_target_df['No'] == target_no]
+            if not target_row.empty:
+                t_no = int(target_row.iloc[0]['No'])
+                if target_row.iloc[0]['Finish_Check']:
+                    time_jp, net_jp = get_time_display(target_row.iloc[0]['Finish_Check_Time'], start_time_val)
+                    st.success(f"✅ 選択中: No.{t_no:03d} (済)\n(着 {time_jp} / ﾀｲﾑ {net_jp})")
+                else:
+                    st.success(f"✅ 選択中: No.{t_no:03d} (未ゴール)")
+            if st.button("🔄 選び直す (対象2)", key="reset_target"):
+                st.session_state.close_target_no = 0
+                st.rerun()
                 
     st.markdown("---")
 
@@ -646,6 +704,9 @@ with tab3:
                                     update_finish_cells(target_no_val, True, new_time_str)
                                     st.session_state.local_updates[f"finish_{target_no_val}"] = True
                                     st.session_state.local_updates[f"time_{target_no_val}"] = new_time_str
+                                    # 処理完了時に選択状態をリセット
+                                    st.session_state.close_base_no = 0
+                                    st.session_state.close_target_no = 0
                                     st.success(success_msg)
                                     st.rerun()
                                 except Exception as e:
@@ -721,25 +782,6 @@ with tab4:
                 time.sleep(2.0)
                 load_data.clear()
                 st.rerun()
-            except Exception as e:
-                st.error(f"更新エラーが発生しました: {e}")
-        
-        st.markdown("---")
-        default_datetime_str = start_time_val.strftime('%Y%m%d%H%M%S') if start_time_val else datetime.datetime.now(JST).strftime('%Y%m%d%H%M%S')
-        manual_datetime_str = st.text_input("手動設定 (YYYYMMDDHHMMSS形式)", value=default_datetime_str, max_chars=14)
-        
-        if st.button("手動入力した時刻をセット"):
-            try:
-                if len(manual_datetime_str) != 14 or not manual_datetime_str.isdigit():
-                    st.error("⚠️ 14桁の半角数字（例: 20241025093000）で入力してください。")
-                else:
-                    new_manual_datetime = datetime.datetime.strptime(manual_datetime_str, '%Y%m%d%H%M%S').replace(tzinfo=JST)
-                    update_setting_cell('start_time', f"'{new_manual_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
-                    time.sleep(2.0)
-                    load_data.clear()
-                    st.rerun()
-            except ValueError:
-                st.error("⚠️ 正しい日時（存在する年月日・時刻）を入力してください。")
             except Exception as e:
                 st.error(f"更新エラーが発生しました: {e}")
 
